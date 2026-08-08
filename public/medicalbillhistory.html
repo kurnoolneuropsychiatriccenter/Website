@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medical Bill History - Kurnool Neuro Psychiatric and ENT Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Medical Bill History</h1>
+      </div>
+      <div class="space-x-3">
+        <a href="medicalbill.html" class="bg-green-600 px-3 py-1.5 rounded text-sm font-medium hover:bg-green-700"><i class="fa fa-plus mr-1"></i> New Medical Bill</a>
+        <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6">
+    <!-- Filters -->
+    <div class="bg-white p-4 rounded-lg shadow mb-6 flex flex-wrap items-center gap-4">
+      <div class="flex items-center gap-2">
+        <label class="text-sm font-medium">From:</label>
+        <input type="date" id="fromDate" class="border px-3 py-1.5 rounded text-sm focus:outline-blue-500" data-testid="from-date-input">
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-sm font-medium">To:</label>
+        <input type="date" id="toDate" class="border px-3 py-1.5 rounded text-sm focus:outline-blue-500" data-testid="to-date-input">
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="text" id="searchInput" placeholder="Bill No, Patient Code, Name..." class="border px-3 py-2 rounded text-sm w-64 focus:outline-blue-500" data-testid="search-input">
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-sm font-medium flex items-center gap-1">
+          <input type="checkbox" id="todayFilter" checked onchange="loadBillHistory()" data-testid="today-filter"> Today
+        </label>
+      </div>
+      <button onclick="loadBillHistory()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700" data-testid="filter-btn"><i class="fa fa-filter mr-1"></i> Apply Filter</button>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-white rounded-lg shadow overflow-x-auto">
+      <table class="w-full text-left border-collapse" data-testid="medical-bill-history-table">
+        <thead>
+          <tr class="bg-blue-50 text-blue-900 border-b text-xs">
+            <th class="p-3">Bill No</th>
+            <th class="p-3">Date</th>
+            <th class="p-3">Patient Code</th>
+            <th class="p-3">Patient Name</th>
+            <th class="p-3">Mobile</th>
+            <th class="p-3">Subtotal</th>
+            <th class="p-3">Discount</th>
+            <th class="p-3">Grand Total</th>
+            <th class="p-3 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="billHistoryBody" class="divide-y text-sm">
+          <tr><td colspan="9" class="p-6 text-center text-gray-500">Loading medical bill history...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    async function loadBillHistory() {
+      const today = document.getElementById('todayFilter').checked;
+      const from_date = document.getElementById('fromDate').value;
+      const to_date = document.getElementById('toDate').value;
+      const search = document.getElementById('searchInput').value;
+
+      let url = `/api/medicalbill/history?today=${today}`;
+      if (!today && from_date && to_date) {
+        url = `/api/medicalbill/history?from_date=${from_date}&to_date=${to_date}&today=false`;
+      }
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        const tbody = document.getElementById('billHistoryBody');
+        tbody.innerHTML = '';
+
+        if (json.success && json.data.length > 0) {
+          json.data.forEach(b => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="p-3 font-semibold text-blue-600">${b.bill_no}</td>
+              <td class="p-3">${b.bill_date}</td>
+              <td class="p-3 font-medium">${b.patient_code}</td>
+              <td class="p-3">${b.patient_name}</td>
+              <td class="p-3">${b.mobile || '-'}</td>
+              <td class="p-3">₹${b.subtotal}</td>
+              <td class="p-3 text-red-600">₹${b.discount_amount} (${b.discount_percent}%)</td>
+              <td class="p-3 font-bold text-green-700">₹${b.grand_total}</td>
+              <td class="p-3 text-center space-x-2">
+                <a href="medicalbillprint.html?id=${b.id}" target="_blank" class="text-blue-600 hover:text-blue-800" title="Print" data-testid="print-bill-${b.id}"><i class="fa fa-print"></i></a>
+                <button onclick="deleteBill(${b.id})" class="text-red-600 hover:text-red-800" title="Delete & Restore Stock" data-testid="delete-bill-${b.id}"><i class="fa fa-trash"></i></button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        } else {
+          tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-gray-500">No medical bill history found.</td></tr>`;
+        }
+      } catch (err) {
+        console.error('Error loading bill history', err);
+      }
+    }
+
+    async function deleteBill(id) {
+      if (!confirm('Are you sure you want to delete this bill? This will restore the stock quantity!')) return;
+      try {
+        const res = await fetch(`/api/medicalbill/${id}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (json.success) {
+          alert('Bill deleted and stock restored successfully.');
+          loadBillHistory();
+        } else {
+          alert(json.message);
+        }
+      } catch (err) {
+        console.error('Error deleting bill', err);
+      }
+    }
+
+    document.getElementById('fromDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('toDate').value = new Date().toISOString().split('T')[0];
+    loadBillHistory();
+  </script>
+</body>
+</html>

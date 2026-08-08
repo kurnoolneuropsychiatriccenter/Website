@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medicine Master - Kurnool Neuro Psychiatric and ENT Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Medicine Master & Stock</h1>
+      </div>
+      <div>
+        <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6">
+    <!-- Filter Bar -->
+    <div class="bg-white p-4 rounded-lg shadow mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+        <input type="text" id="searchInput" placeholder="Search medicine name, generic..." class="border px-3 py-2 rounded text-sm w-64 focus:outline-blue-500" data-testid="search-medicine-input">
+        <button onclick="loadMedicines()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700" data-testid="search-btn"><i class="fa fa-search mr-1"></i> Search</button>
+        <button onclick="resetFilters()" class="bg-gray-200 text-gray-700 px-3 py-2 rounded text-sm font-medium hover:bg-gray-300">Reset</button>
+      </div>
+      <div class="flex items-center gap-3 w-full md:w-auto justify-end">
+        <label class="text-sm font-medium flex items-center gap-1 text-red-600">
+          <input type="checkbox" id="lowStockFilter" onchange="loadMedicines()" data-testid="low-stock-checkbox"> Low Stock
+        </label>
+        <label class="text-sm font-medium flex items-center gap-1 text-orange-600">
+          <input type="checkbox" id="expiryFilter" onchange="loadMedicines()" data-testid="expiry-checkbox"> Expiring Soon
+        </label>
+        <button onclick="openAddModal()" class="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700" data-testid="add-medicine-btn"><i class="fa fa-plus mr-1"></i> Add Medicine</button>
+      </div>
+    </div>
+
+    <!-- Medicines Table -->
+    <div class="bg-white rounded-lg shadow overflow-x-auto">
+      <table class="w-full text-left border-collapse" data-testid="medicines-table">
+        <thead>
+          <tr class="bg-blue-50 text-blue-900 border-b text-sm">
+            <th class="p-3">ID</th>
+            <th class="p-3">Medicine Name</th>
+            <th class="p-3">Generic Name</th>
+            <th class="p-3">Batch</th>
+            <th class="p-3">Expiry</th>
+            <th class="p-3">Rate (₹)</th>
+            <th class="p-3">MRP (₹)</th>
+            <th class="p-3">Stock</th>
+            <th class="p-3 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="medicinesTableBody" class="divide-y text-sm">
+          <tr><td colspan="9" class="p-4 text-center text-gray-500">Loading medicines...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="medicineModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-lg shadow-lg w-full max-w-xl p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h3 id="modalTitle" class="text-lg font-bold text-gray-800">Add Medicine</h3>
+        <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700"><i class="fa fa-times text-lg"></i></button>
+      </div>
+      <form id="medicineForm" onsubmit="saveMedicine(event)">
+        <input type="hidden" id="medicineId">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="col-span-2">
+            <label class="block text-sm font-medium mb-1">Medicine Name *</label>
+            <input type="text" id="medicineName" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="med-name-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Generic Name</label>
+            <input type="text" id="genericName" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="med-generic-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">HSN Number</label>
+            <input type="text" id="hsnNumber" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="med-hsn-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Batch Number</label>
+            <input type="text" id="batchNumber" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="med-batch-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Expiry Date</label>
+            <input type="date" id="expiryDate" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="med-expiry-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Purchase Rate (₹)</label>
+            <input type="number" id="rate" step="0.01" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="med-rate-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">MRP (₹)</label>
+            <input type="number" id="mrp" step="0.01" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="med-mrp-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Current Stock</label>
+            <input type="number" id="currentStock" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="med-stock-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Minimum Stock Alert</label>
+            <input type="number" id="minimumStock" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="med-minstock-input">
+          </div>
+        </div>
+        <div class="mt-6 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal()" class="bg-gray-200 px-4 py-2 rounded text-sm font-medium hover:bg-gray-300">Cancel</button>
+          <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700" data-testid="save-medicine-btn">Save Medicine</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    async function loadMedicines() {
+      const search = document.getElementById('searchInput').value;
+      const lowStock = document.getElementById('lowStockFilter').checked;
+      const expiry = document.getElementById('expiryFilter').checked;
+
+      let url = `/api/medicines?low_stock=${lowStock}&expiry_alert=${expiry}`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        const tbody = document.getElementById('medicinesTableBody');
+        tbody.innerHTML = '';
+
+        if (json.success && json.data.length > 0) {
+          json.data.forEach(m => {
+            const isLow = m.current_stock <= m.minimum_stock;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="p-3 font-semibold text-blue-600">${m.id}</td>
+              <td class="p-3 font-medium">${m.medicine_name}</td>
+              <td class="p-3 text-gray-600">${m.generic_name || '-'}</td>
+              <td class="p-3">${m.batch_number || '-'}</td>
+              <td class="p-3">${m.expiry_date || '-'}</td>
+              <td class="p-3">₹${m.rate || 0}</td>
+              <td class="p-3">₹${m.mrp || 0}</td>
+              <td class="p-3 font-bold ${isLow ? 'text-red-600' : 'text-gray-800'}">${m.current_stock} ${isLow ? '<i class="fa fa-triangle-exclamation text-xs" title="Low Stock"></i>' : ''}</td>
+              <td class="p-3 text-center space-x-2">
+                <button onclick='editMedicine(${JSON.stringify(m)})' class="text-blue-600 hover:text-blue-800" title="Edit" data-testid="edit-med-${m.id}"><i class="fa fa-edit"></i></button>
+                <button onclick="deleteMedicine(${m.id})" class="text-red-600 hover:text-red-800" title="Delete" data-testid="delete-med-${m.id}"><i class="fa fa-trash"></i></button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        } else {
+          tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-gray-500">No medicines found.</td></tr>`;
+        }
+      } catch (err) {
+        console.error('Error loading medicines', err);
+      }
+    }
+
+    function openAddModal() {
+      document.getElementById('modalTitle').innerText = 'Add Medicine';
+      document.getElementById('medicineId').value = '';
+      document.getElementById('medicineForm').reset();
+      document.getElementById('medicineModal').classList.remove('hidden');
+    }
+
+    function editMedicine(m) {
+      document.getElementById('modalTitle').innerText = 'Edit Medicine';
+      document.getElementById('medicineId').value = m.id;
+      document.getElementById('medicineName').value = m.medicine_name;
+      document.getElementById('genericName').value = m.generic_name || '';
+      document.getElementById('hsnNumber').value = m.hsn_number || '';
+      document.getElementById('batchNumber').value = m.batch_number || '';
+      document.getElementById('expiryDate').value = m.expiry_date || '';
+      document.getElementById('rate').value = m.rate || 0;
+      document.getElementById('mrp').value = m.mrp || 0;
+      document.getElementById('currentStock').value = m.current_stock || 0;
+      document.getElementById('minimumStock').value = m.minimum_stock || 10;
+      document.getElementById('medicineModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('medicineModal').classList.add('hidden');
+    }
+
+    async function saveMedicine(e) {
+      e.preventDefault();
+      const id = document.getElementById('medicineId').value;
+      const data = {
+        medicine_name: document.getElementById('medicineName').value,
+        generic_name: document.getElementById('genericName').value,
+        hsn_number: document.getElementById('hsnNumber').value,
+        batch_number: document.getElementById('batchNumber').value,
+        expiry_date: document.getElementById('expiryDate').value,
+        rate: parseFloat(document.getElementById('rate').value) || 0,
+        mrp: parseFloat(document.getElementById('mrp').value) || 0,
+        current_stock: parseFloat(document.getElementById('currentStock').value) || 0,
+        minimum_stock: parseFloat(document.getElementById('minimumStock').value) || 10,
+        status: 'Active'
+      };
+
+      const url = id ? `/api/medicines/${id}` : '/api/medicines';
+      const method = id ? 'PUT' : 'POST';
+
+      try {
+        const res = await fetch(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const json = await res.json();
+        if (json.success) {
+          closeModal();
+          loadMedicines();
+        } else {
+          alert(json.message);
+        }
+      } catch (err) {
+        console.error('Error saving medicine', err);
+      }
+    }
+
+    async function deleteMedicine(id) {
+      if (!confirm('Are you sure you want to delete this medicine?')) return;
+      try {
+        const res = await fetch(`/api/medicines/${id}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (json.success) {
+          loadMedicines();
+        } else {
+          alert(json.message);
+        }
+      } catch (err) {
+        console.error('Error deleting medicine', err);
+      }
+    }
+
+    function resetFilters() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('lowStockFilter').checked = false;
+      document.getElementById('expiryFilter').checked = false;
+      loadMedicines();
+    }
+
+    loadMedicines();
+  </script>
+</body>
+</html>

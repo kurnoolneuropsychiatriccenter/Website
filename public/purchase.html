@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Purchase Master - Kurnool Neuro Psychiatric and ENT Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Medicine Purchase Entry</h1>
+      </div>
+      <div class="space-x-3">
+        <a href="purchasehistory.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-history mr-1"></i> Purchase History</a>
+        <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6">
+    <form id="purchaseForm" onsubmit="savePurchase(event)">
+      <!-- Purchase Header info -->
+      <div class="bg-white p-6 rounded-lg shadow mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Invoice Number *</label>
+          <input type="text" id="invoiceNo" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="invoice-no-input">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Supplier Name *</label>
+          <input type="text" id="supplierName" required placeholder="e.g. Pharma Distributor" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="supplier-name-input">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Invoice Date *</label>
+          <input type="date" id="invoiceDate" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="invoice-date-input">
+        </div>
+      </div>
+
+      <!-- Medicine Table -->
+      <div class="bg-white p-6 rounded-lg shadow mb-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-bold text-gray-800">Purchased Medicines</h2>
+          <button type="button" onclick="addPurchaseRow()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700" data-testid="add-more-medicine-btn">
+            <i class="fa fa-plus mr-1"></i> Add More Medicine
+          </button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse" data-testid="purchase-items-table">
+            <thead>
+              <tr class="bg-blue-50 text-blue-900 border-b text-xs">
+                <th class="p-2">Medicine</th>
+                <th class="p-2">Batch</th>
+                <th class="p-2">Expiry</th>
+                <th class="p-2">Qty</th>
+                <th class="p-2">HSN</th>
+                <th class="p-2">Rate (₹)</th>
+                <th class="p-2">MRP (₹)</th>
+                <th class="p-2">Amount (₹)</th>
+                <th class="p-2 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="purchaseRowsBody" class="divide-y text-sm">
+              <!-- Dynamically added rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Grand Total Section -->
+        <div class="mt-6 flex justify-end items-center border-t pt-4">
+          <div class="text-right">
+            <span class="text-gray-600 text-lg mr-4 font-medium">Grand Total:</span>
+            <span id="grandTotalDisplay" class="text-2xl font-bold text-blue-600" data-testid="grand-total">₹0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end">
+        <button type="submit" class="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700 shadow-lg text-lg" data-testid="save-purchase-btn">
+          <i class="fa fa-save mr-2"></i> Save Purchase & Update Stock
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    let allMedicines = [];
+
+    async function initPurchase() {
+      // Set today date
+      document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
+      try {
+        const res = await fetch('/api/medicines');
+        const json = await res.json();
+        if (json.success) {
+          allMedicines = json.data;
+          addPurchaseRow(); // Add first row
+        }
+      } catch (err) {
+        console.error('Error fetching medicines', err);
+      }
+    }
+
+    function addPurchaseRow() {
+      const tbody = document.getElementById('purchaseRowsBody');
+      const rowId = Date.now() + Math.random();
+      const tr = document.createElement('tr');
+      tr.id = `row-${rowId}`;
+
+      let medOptions = '<option value="">Select Medicine</option>';
+      allMedicines.forEach(m => {
+        medOptions += `<option value="${m.id}" data-rate="${m.rate || 0}" data-mrp="${m.mrp || 0}" data-hsn="${m.hsn_number || ''}">${m.medicine_name} (${m.batch_number || 'No batch'})</option>`;
+      });
+
+      tr.innerHTML = `
+        <td class="p-2">
+          <select class="border px-2 py-1 rounded text-sm w-48 med-select focus:outline-blue-500" onchange="onMedicineChange('${rowId}')" required data-testid="purchase-med-select">
+            ${medOptions}
+          </select>
+        </td>
+        <td class="p-2"><input type="text" class="border px-2 py-1 rounded text-sm w-24 batch-input" required data-testid="purchase-batch-input"></td>
+        <td class="p-2"><input type="date" class="border px-2 py-1 rounded text-sm w-32 expiry-input" required data-testid="purchase-expiry-input"></td>
+        <td class="p-2"><input type="number" min="1" value="1" class="border px-2 py-1 rounded text-sm w-20 qty-input" oninput="calculateRow('${rowId}')" required data-testid="purchase-qty-input"></td>
+        <td class="p-2"><input type="text" class="border px-2 py-1 rounded text-sm w-20 hsn-input" data-testid="purchase-hsn-input"></td>
+        <td class="p-2"><input type="number" step="0.01" min="0" value="0" class="border px-2 py-1 rounded text-sm w-24 rate-input" oninput="calculateRow('${rowId}')" required data-testid="purchase-rate-input"></td>
+        <td class="p-2"><input type="number" step="0.01" min="0" value="0" class="border px-2 py-1 rounded text-sm w-24 mrp-input" required data-testid="purchase-mrp-input"></td>
+        <td class="p-2 font-semibold text-gray-700 amount-display">₹0.00</td>
+        <td class="p-2 text-center">
+          <button type="button" onclick="removeRow('${rowId}')" class="text-red-600 hover:text-red-800" data-testid="remove-row-btn"><i class="fa fa-trash"></i></button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    function onMedicineChange(rowId) {
+      const tr = document.getElementById(`row-${rowId}`);
+      const select = tr.querySelector('.med-select');
+      const opt = select.options[select.selectedIndex];
+      if (opt && opt.value) {
+        tr.querySelector('.rate-input').value = opt.getAttribute('data-rate') || 0;
+        tr.querySelector('.mrp-input').value = opt.getAttribute('data-mrp') || 0;
+        tr.querySelector('.hsn-input').value = opt.getAttribute('data-hsn') || '';
+        calculateRow(rowId);
+      }
+    }
+
+    function calculateRow(rowId) {
+      const tr = document.getElementById(`row-${rowId}`);
+      const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
+      const rate = parseFloat(tr.querySelector('.rate-input').value) || 0;
+      const amount = qty * rate;
+      tr.querySelector('.amount-display').innerText = '₹' + amount.toFixed(2);
+      calculateGrandTotal();
+    }
+
+    function calculateGrandTotal() {
+      let grandTotal = 0;
+      document.querySelectorAll('#purchaseRowsBody tr').forEach(tr => {
+        const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
+        const rate = parseFloat(tr.querySelector('.rate-input').value) || 0;
+        grandTotal += (qty * rate);
+      });
+      document.getElementById('grandTotalDisplay').innerText = '₹' + grandTotal.toFixed(2);
+    }
+
+    function removeRow(rowId) {
+      const tbody = document.getElementById('purchaseRowsBody');
+      if (tbody.rows.length <= 1) {
+        alert('At least one medicine row is required.');
+        return;
+      }
+      const tr = document.getElementById(`row-${rowId}`);
+      tr.remove();
+      calculateGrandTotal();
+    }
+
+    async function savePurchase(e) {
+      e.preventDefault();
+      const invoice_no = document.getElementById('invoiceNo').value;
+      const supplier_name = document.getElementById('supplierName').value;
+      const invoice_date = document.getElementById('invoiceDate').value;
+
+      const items = [];
+      let valid = true;
+
+      document.querySelectorAll('#purchaseRowsBody tr').forEach(tr => {
+        const medicine_id = tr.querySelector('.med-select').value;
+        const batch = tr.querySelector('.batch-input').value;
+        const expiry = tr.querySelector('.expiry-input').value;
+        const qty = parseFloat(tr.querySelector('.qty-input').value);
+        const hsn = tr.querySelector('.hsn-input').value;
+        const rate = parseFloat(tr.querySelector('.rate-input').value);
+        const mrp = parseFloat(tr.querySelector('.mrp-input').value);
+
+        if (!medicine_id || !batch || !expiry || isNaN(qty) || isNaN(rate)) {
+          valid = false;
+        } else {
+          items.push({ medicine_id, batch, expiry, qty, hsn, rate, mrp });
+        }
+      });
+
+      if (!valid || items.length === 0) {
+        alert('Please fill all required fields in purchase items.');
+        return;
+      }
+
+      const payload = { invoice_no, supplier_name, invoice_date, items };
+
+      try {
+        const res = await fetch('/api/purchase/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert('Purchase saved successfully and medicine stock updated!');
+          window.location.href = 'purchasehistory.html';
+        } else {
+          alert(json.message);
+        }
+      } catch (err) {
+        console.error('Error saving purchase', err);
+      }
+    }
+
+    initPurchase();
+  </script>
+</body>
+</html>

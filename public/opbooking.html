@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OP Booking - Kurnool Neuro Psychiatric and ENT Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">OP Booking & Token Generation</h1>
+      </div>
+      <div class="space-x-3">
+        <a href="ophistory.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-history mr-1"></i> OP History</a>
+        <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6 max-w-4xl">
+    <form id="opForm" onsubmit="saveOpBooking(event)">
+      <div class="bg-white p-6 rounded-lg shadow mb-6 space-y-4">
+        <h2 class="text-lg font-bold text-gray-800 border-b pb-2"><i class="fa fa-user-clock mr-2 text-blue-600"></i> Outpatient Visit Registration</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">OP Date *</label>
+            <input type="date" id="opDate" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="op-date-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Patient Code *</label>
+            <div class="flex">
+              <input type="text" id="patientCode" required placeholder="e.g. KNC001000001" class="w-full border px-3 py-2 rounded-l text-sm uppercase focus:outline-blue-500" onblur="fetchPatient()" data-testid="patient-code-input">
+              <button type="button" onclick="fetchPatient()" class="bg-blue-600 text-white px-3 rounded-r text-sm" data-testid="fetch-patient-btn"><i class="fa fa-search"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Patient Details (Auto-loaded)</label>
+          <input type="text" id="patientDetailsDisplay" readonly placeholder="Patient Name, Age, Gender, Mobile will auto-load here" class="w-full border bg-gray-100 px-3 py-2 rounded text-sm text-gray-700 font-medium" data-testid="patient-details-display">
+          <input type="hidden" id="patientId">
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Select Doctor *</label>
+            <select id="doctorSelect" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" onchange="onDoctorChange()" data-testid="doctor-select">
+              <option value="">Select Doctor</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Consultation Fee (₹) *</label>
+            <input type="number" id="consultationFee" step="0.01" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="consultation-fee-input">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Payment Mode</label>
+            <select id="paymentMode" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="payment-mode-select">
+              <option value="Cash">Cash</option>
+              <option value="UPI">UPI / QR</option>
+              <option value="Card">Card</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Remarks</label>
+            <input type="text" id="remarks" placeholder="Optional notes..." class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="remarks-input">
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end space-x-3">
+        <button type="submit" class="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700 shadow text-lg" data-testid="save-op-btn">
+          <i class="fa fa-check-circle mr-2"></i> Save OP Visit & Print Bill
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    let doctorsList = [];
+
+    async function initOpBooking() {
+      document.getElementById('opDate').value = new Date().toISOString().split('T')[0];
+      try {
+        const res = await fetch('/api/doctors');
+        const json = await res.json();
+        if (json.success) {
+          doctorsList = json.data;
+          const select = document.getElementById('doctorSelect');
+          doctorsList.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.id;
+            opt.setAttribute('data-fee', d.consultation_fee || 0);
+            opt.innerText = `${d.doctor_name} (${d.qualification || ''})`;
+            select.appendChild(opt);
+          });
+        }
+      } catch (err) {
+        console.error('Error loading doctors', err);
+      }
+    }
+
+    function onDoctorChange() {
+      const select = document.getElementById('doctorSelect');
+      const opt = select.options[select.selectedIndex];
+      if (opt && opt.value) {
+        const fee = opt.getAttribute('data-fee') || 0;
+        document.getElementById('consultationFee').value = fee;
+      }
+    }
+
+    async function fetchPatient() {
+      const code = document.getElementById('patientCode').value.trim();
+      if (!code) return;
+      try {
+        const res = await fetch(`/api/patients/code/${encodeURIComponent(code)}`);
+        const json = await res.json();
+        if (json.success && json.data) {
+          const p = json.data;
+          document.getElementById('patientId').value = p.id;
+          document.getElementById('patientDetailsDisplay').value = `${p.patient_name} | Age: ${p.age || '-'} | Gender: ${p.gender || '-'} | Mobile: ${p.mobile || '-'}`;
+        } else {
+          alert('Patient not found with code: ' + code);
+          document.getElementById('patientCode').value = '';
+          document.getElementById('patientId').value = '';
+          document.getElementById('patientDetailsDisplay').value = '';
+        }
+      } catch (err) {
+        console.error('Error fetching patient', err);
+      }
+    }
+
+    async function saveOpBooking(e) {
+      e.preventDefault();
+      const patient_id = document.getElementById('patientId').value;
+      if (!patient_id) {
+        alert('Please enter a valid Patient Code and load patient details.');
+        return;
+      }
+
+      const payload = {
+        op_date: document.getElementById('opDate').value,
+        patient_id: patient_id,
+        doctor_id: document.getElementById('doctorSelect').value,
+        consultation_fee: parseFloat(document.getElementById('consultationFee').value) || 0,
+        payment_mode: document.getElementById('paymentMode').value,
+        remarks: document.getElementById('remarks').value
+      };
+
+      try {
+        const res = await fetch('/api/op/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert(`OP Booking successful! Token Number: ${json.data.token_number}`);
+          window.location.href = `opprint.html?id=${json.data.id}`;
+        } else {
+          alert(json.message);
+        }
+      } catch (err) {
+        console.error('Error saving OP booking', err);
+      }
+    }
+
+    initOpBooking();
+  </script>
+</body>
+</html>

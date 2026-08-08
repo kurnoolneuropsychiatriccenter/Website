@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reports - Kurnool Neuro Psychiatric and ENT Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @media print {
+      body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md no-print">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Clinic & Pharmacy Reports</h1>
+      </div>
+      <div>
+        <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6">
+    <!-- Report Selector & Filters -->
+    <div class="bg-white p-6 rounded-lg shadow mb-6 no-print space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Select Report Type</label>
+          <select id="reportTypeSelect" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500 font-medium" data-testid="report-type-select">
+            <option value="todays_op">1. Today's OP Report</option>
+            <option value="op_collection">2. OP Collection Report</option>
+            <option value="medical_sales">3. Medical Sales Report</option>
+            <option value="purchase">4. Purchase Report</option>
+            <option value="stock">5. Stock Report</option>
+            <option value="low_stock">6. Low Stock Report</option>
+            <option value="expiry">7. Expiry Alert Report</option>
+            <option value="patient_report">8. Patient Master Report</option>
+            <option value="doctor_report">9. Doctor Master Report</option>
+            <option value="daily_collection">10. Daily Collection Summary</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">From Date</label>
+          <input type="date" id="fromDate" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="from-date-input">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">To Date</label>
+          <input type="date" id="toDate" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="to-date-input">
+        </div>
+        <div class="flex items-end gap-2">
+          <label class="text-sm font-medium flex items-center gap-1 mb-2">
+            <input type="checkbox" id="todayFilter" checked data-testid="today-filter"> Today
+          </label>
+        </div>
+      </div>
+      <div class="flex justify-end space-x-3 pt-2 border-t">
+        <button onclick="fetchReport()" class="bg-blue-600 text-white px-5 py-2 rounded text-sm font-bold hover:bg-blue-700 shadow" data-testid="generate-report-btn">
+          <i class="fa fa-chart-bar mr-1"></i> Generate Report
+        </button>
+        <button onclick="window.print()" class="bg-gray-700 text-white px-5 py-2 rounded text-sm font-bold hover:bg-gray-800 shadow" data-testid="print-report-btn">
+          <i class="fa fa-print mr-1"></i> Print Report
+        </button>
+      </div>
+    </div>
+
+    <!-- Report Output Container -->
+    <div class="bg-white p-6 rounded-lg shadow" id="reportOutputArea">
+      <div class="text-center border-b pb-4 mb-4">
+        <h2 class="text-xl font-bold text-blue-950">Kurnool Neuro Psychiatric and ENT Center</h2>
+        <p class="text-sm text-gray-600" id="reportTitleDisplay">Report</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm" id="reportTable" data-testid="report-table">
+          <thead>
+            <tr class="bg-blue-50 text-blue-900 border-b text-xs" id="reportTableHead">
+              <!-- Headers -->
+            </tr>
+          </thead>
+          <tbody id="reportTableBody" class="divide-y">
+            <tr><td class="p-4 text-center text-gray-500">Select report and click Generate.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('fromDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('toDate').value = new Date().toISOString().split('T')[0];
+
+    async function fetchReport() {
+      const type = document.getElementById('reportTypeSelect').value;
+      const today = document.getElementById('todayFilter').checked;
+      const from_date = document.getElementById('fromDate').value;
+      const to_date = document.getElementById('toDate').value;
+
+      let url = `/api/reports/${type}?today=${today}`;
+      if (!today && from_date && to_date) {
+        url = `/api/reports/${type}?from_date=${from_date}&to_date=${to_date}&today=false`;
+      }
+
+      document.getElementById('reportTitleDisplay').innerText = document.getElementById('reportTypeSelect').selectedOptions[0].text;
+
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        if (json.success) {
+          renderReportTable(type, json.data);
+        } else {
+          alert(json.message);
+        }
+      } catch (err) {
+        console.error('Error fetching report', err);
+      }
+    }
+
+    function renderReportTable(type, data) {
+      const thead = document.getElementById('reportTableHead');
+      const tbody = document.getElementById('reportTableBody');
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+
+      if (!data || data.length === 0) {
+        tbody.innerHTML = `<tr><td class="p-6 text-center text-gray-500">No records found for this report.</td></tr>`;
+        return;
+      }
+
+      let columns = [];
+      if (type === 'todays_op' || type === 'op_collection') {
+        columns = ['Ref No', 'Date', 'Patient Code', 'Patient Name', 'Mobile', 'Doctor', 'Amount (₹)', 'Payment'];
+      } else if (type === 'medical_sales') {
+        columns = ['Bill No', 'Date', 'Patient Code', 'Patient Name', 'Mobile', 'Subtotal', 'Discount', 'Grand Total (₹)'];
+      } else if (type === 'purchase') {
+        columns = ['Invoice No', 'Date', 'Supplier Name', 'Grand Total (₹)'];
+      } else if (type === 'stock') {
+        columns = ['ID', 'Medicine Name', 'Generic Name', 'Batch', 'Expiry', 'Rate (₹)', 'MRP (₹)', 'Stock', 'Min Stock'];
+      } else if (type === 'low_stock') {
+        columns = ['ID', 'Medicine Name', 'Batch', 'Stock', 'Min Stock', 'Status'];
+      } else if (type === 'expiry') {
+        columns = ['ID', 'Medicine Name', 'Batch', 'Expiry Date', 'Stock', 'MRP (₹)'];
+      } else if (type === 'patient_report') {
+        columns = ['ID', 'Patient Code', 'Patient Name', 'Age / Gender', 'Mobile', 'Address', 'Reg. Date'];
+      } else if (type === 'doctor_report') {
+        columns = ['ID', 'Doctor Name', 'Qualification', 'Mobile', 'Fee (₹)', 'Status'];
+      } else if (type === 'daily_collection') {
+        columns = ['Date', 'Total Collection (₹)'];
+      }
+
+      let trHead = document.createElement('tr');
+      columns.forEach(c => {
+        trHead.innerHTML += `<th class="p-3">${c}</th>`;
+      });
+      thead.appendChild(trHead);
+
+      data.forEach(row => {
+        const tr = document.createElement('tr');
+        if (type === 'todays_op' || type === 'op_collection') {
+          tr.innerHTML = `
+            <td class="p-3 font-semibold text-blue-600">${row.ref_no}</td>
+            <td class="p-3">${row.bill_date}</td>
+            <td class="p-3">${row.patient_code}</td>
+            <td class="p-3 font-medium">${row.patient_name}</td>
+            <td class="p-3">${row.mobile || '-'}</td>
+            <td class="p-3">${row.doctor_name}</td>
+            <td class="p-3 font-bold text-green-700">₹${row.amount}</td>
+            <td class="p-3">${row.payment_mode}</td>
+          `;
+        } else if (type === 'medical_sales') {
+          tr.innerHTML = `
+            <td class="p-3 font-semibold text-blue-600">${row.ref_no}</td>
+            <td class="p-3">${row.bill_date}</td>
+            <td class="p-3">${row.patient_code}</td>
+            <td class="p-3 font-medium">${row.patient_name}</td>
+            <td class="p-3">${row.mobile || '-'}</td>
+            <td class="p-3">₹${row.subtotal}</td>
+            <td class="p-3 text-red-600">₹${row.discount_amount}</td>
+            <td class="p-3 font-bold text-green-700">₹${row.amount}</td>
+          `;
+        } else if (type === 'purchase') {
+          tr.innerHTML = `
+            <td class="p-3 font-semibold text-blue-600">${row.ref_no}</td>
+            <td class="p-3">${row.bill_date}</td>
+            <td class="p-3 font-medium">${row.supplier_name}</td>
+            <td class="p-3 font-bold text-green-700">₹${row.amount}</td>
+          `;
+        } else if (type === 'stock') {
+          tr.innerHTML = `
+            <td class="p-3">${row.id}</td>
+            <td class="p-3 font-medium">${row.medicine_name}</td>
+            <td class="p-3">${row.generic_name || '-'}</td>
+            <td class="p-3">${row.batch_number || '-'}</td>
+            <td class="p-3">${row.expiry_date || '-'}</td>
+            <td class="p-3">₹${row.rate}</td>
+            <td class="p-3">₹${row.mrp}</td>
+            <td class="p-3 font-bold ${row.current_stock <= row.minimum_stock ? 'text-red-600' : 'text-gray-800'}">${row.current_stock}</td>
+            <td class="p-3">${row.minimum_stock}</td>
+          `;
+        } else if (type === 'low_stock') {
+          tr.innerHTML = `
+            <td class="p-3">${row.id}</td>
+            <td class="p-3 font-medium">${row.medicine_name}</td>
+            <td class="p-3">${row.batch_number || '-'}</td>
+            <td class="p-3 font-bold text-red-600">${row.current_stock}</td>
+            <td class="p-3">${row.minimum_stock}</td>
+            <td class="p-3"><span class="bg-red-100 text-red-800 px-2 py-0.5 rounded text-xs font-bold">Low Stock</span></td>
+          `;
+        } else if (type === 'expiry') {
+          tr.innerHTML = `
+            <td class="p-3">${row.id}</td>
+            <td class="p-3 font-medium">${row.medicine_name}</td>
+            <td class="p-3">${row.batch_number || '-'}</td>
+            <td class="p-3 font-bold text-orange-600">${row.expiry_date}</td>
+            <td class="p-3">${row.current_stock}</td>
+            <td class="p-3">₹${row.mrp}</td>
+          `;
+        } else if (type === 'patient_report') {
+          tr.innerHTML = `
+            <td class="p-3">${row.id}</td>
+            <td class="p-3 font-semibold text-blue-600">${row.patient_code}</td>
+            <td class="p-3 font-medium">${row.patient_name}</td>
+            <td class="p-3">${row.age || '-'} / ${row.gender || '-'}</td>
+            <td class="p-3">${row.mobile || '-'}</td>
+            <td class="p-3">${row.address || '-'}</td>
+            <td class="p-3">${new Date(row.registration_date).toLocaleDateString()}</td>
+          `;
+        } else if (type === 'doctor_report') {
+          tr.innerHTML = `
+            <td class="p-3">${row.id}</td>
+            <td class="p-3 font-medium">${row.doctor_name}</td>
+            <td class="p-3">${row.qualification || '-'}</td>
+            <td class="p-3">${row.mobile || '-'}</td>
+            <td class="p-3 font-semibold">₹${row.consultation_fee}</td>
+            <td class="p-3">${row.status}</td>
+          `;
+        } else if (type === 'daily_collection') {
+          tr.innerHTML = `
+            <td class="p-3 font-semibold">${row.bill_date}</td>
+            <td class="p-3 font-bold text-green-700 text-lg">₹${row.total_collection}</td>
+          `;
+        }
+        tbody.appendChild(tr);
+      });
+    }
+
+    fetchReport();
+  </script>
+</body>
+</html>

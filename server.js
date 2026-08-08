@@ -1,0 +1,967 @@
+const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const cors = require('cors');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Database setup
+const dbFile = path.join(__dirname, 'clinic.db');
+const db = new sqlite3.Database(dbFile, (err) => {
+  if (err) {
+    console.error('Error opening database', err.message);
+  } else {
+    console.log('Connected to SQLite database.');
+    initDb();
+  }
+});
+
+function initDb() {
+  db.serialize(() => {
+    // Patients
+    db.run(`CREATE TABLE IF NOT EXISTS patients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_code TEXT UNIQUE NOT NULL,
+      patient_name TEXT NOT NULL,
+      age INTEGER,
+      gender TEXT,
+      mobile TEXT,
+      address TEXT,
+      registration_date TEXT
+    )`);
+
+    // Doctors
+    db.run(`CREATE TABLE IF NOT EXISTS doctors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      doctor_name TEXT NOT NULL,
+      qualification TEXT,
+      mobile TEXT,
+      consultation_fee REAL,
+      status TEXT DEFAULT 'Active'
+    )`);
+
+    // Medicines Master
+    db.run(`CREATE TABLE IF NOT EXISTS medicines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      medicine_name TEXT NOT NULL,
+      generic_name TEXT,
+      hsn_number TEXT,
+      batch_number TEXT,
+      expiry_date TEXT,
+      rate REAL,
+      mrp REAL,
+      current_stock REAL DEFAULT 0,
+      minimum_stock REAL DEFAULT 10,
+      status TEXT DEFAULT 'Active'
+    )`);
+
+    // OP Token Counter per date
+    db.run(`CREATE TABLE IF NOT EXISTS op_token_counter (
+      date TEXT PRIMARY KEY,
+      last_token INTEGER
+    )`);
+
+    // OP Bills
+    db.run(`CREATE TABLE IF NOT EXISTS op_bills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      op_bill_id TEXT UNIQUE,
+      op_date TEXT,
+      token_number INTEGER,
+      patient_id INTEGER,
+      doctor_id INTEGER,
+      consultation_fee REAL,
+      payment_mode TEXT,
+      remarks TEXT,
+      FOREIGN KEY(patient_id) REFERENCES patients(id),
+      FOREIGN KEY(doctor_id) REFERENCES doctors(id)
+    )`);
+
+    // Purchases Master
+    db.run(`CREATE TABLE IF NOT EXISTS purchases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_no TEXT,
+      supplier_name TEXT,
+      invoice_date TEXT,
+      grand_total REAL
+    )`);
+
+    // Purchase Items
+    db.run(`CREATE TABLE IF NOT EXISTS purchase_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      purchase_id INTEGER,
+      medicine_id INTEGER,
+      batch TEXT,
+      expiry TEXT,
+      qty REAL,
+      hsn TEXT,
+      rate REAL,
+      mrp REAL,
+      amount REAL,
+      FOREIGN KEY(purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
+      FOREIGN KEY(medicine_id) REFERENCES medicines(id)
+    )`);
+
+    // Medical Bills Master
+    db.run(`CREATE TABLE IF NOT EXISTS medical_bills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_no TEXT UNIQUE,
+      bill_date TEXT,
+      patient_id INTEGER,
+      subtotal REAL,
+      discount_percent REAL,
+      discount_amount REAL,
+      grand_total REAL,
+      FOREIGN KEY(patient_id) REFERENCES patients(id)
+    )`);
+
+    // Medical Bill Items
+    db.run(`CREATE TABLE IF NOT EXISTS medical_bill_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      medical_bill_id INTEGER,
+      medicine_id INTEGER,
+      batch TEXT,
+      expiry TEXT,
+      qty REAL,
+      rate REAL,
+      amount REAL,
+      FOREIGN KEY(medical_bill_id) REFERENCES medical_bills(id) ON DELETE CASCADE,
+      FOREIGN KEY(medicine_id) REFERENCES medicines(id)
+    )`);
+
+    // Medicine Returns
+    db.run(`CREATE TABLE IF NOT EXISTS medicine_returns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      return_date TEXT,
+      medicine_id INTEGER,
+      batch TEXT,
+      qty REAL,
+      reason TEXT,
+      supplier TEXT,
+      FOREIGN KEY(medicine_id) REFERENCES medicines(id)
+    )`);
+
+    // Seed sample doctor if none exists
+    db.get(`SELECT COUNT(*) as count FROM doctors`, (err, row) => {
+      if (row && row.count === 0) {
+        db.run(`INSERT INTO doctors (doctor_name, qualification, mobile, consultation_fee, status) VALUES ('Dr. K. Ramesh', 'MS (Neuro), MCh (Psychiatry)', '9876543210', 500, 'Active')`);
+        db.run(`INSERT INTO doctors (doctor_name, qualification, mobile, consultation_fee, status) VALUES ('Dr. S. Sujatha', 'MS (ENT)', '9876543211', 400, 'Active')`);
+      }
+    });
+
+    // Seed sample patient if none exists
+    db.get(`SELECT COUNT(*) as count FROM patients`, (err, row) => {
+      if (row && row.count === 0) {
+        db.run(`INSERT INTO patients (patient_code, patient_name, age, gender, mobile, address, registration_date) VALUES ('KNC001000001', 'Venkat Reddy', 45, 'Male', '9988776655', 'Kurnool', datetime('now', 'localtime'))`);
+        db.run(`INSERT INTO patients (patient_code, patient_name, age, gender, mobile, address, registration_date) VALUES ('KNC001000002', 'Lakshmi Devi', 38, 'Female', '9988776644', 'Nandyal', datetime('now', 'localtime'))`);
+      }
+    });
+
+    // Seed sample medicine if none exists
+    db.get(`SELECT COUNT(*) as count FROM medicines`, (err, row) => {
+      if (row && row.count === 0) {
+        db.run(`INSERT INTO medicines (medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status) VALUES ('Paracetamol 650mg', 'Paracetamol', '3004', 'B123', '2026-12-31', 2.0, 3.5, 150, 20, 'Active')`);
+        db.run(`INSERT INTO medicines (medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status) VALUES ('Clonazepam 0.5mg', 'Clonazepam', '3004', 'C456', '2027-06-30', 5.0, 8.0, 100, 15, 'Active')`);
+      }
+    });
+  });
+}
+
+// Helper to get today YYYY-MM-DD
+function getTodayDate() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// -----------------------------------------------------------------------
+// PATIENTS API
+// -----------------------------------------------------------------------
+app.get('/api/patients', (req, res) => {
+  const { search, from_date, to_date, today } = req.query;
+  let query = `SELECT * FROM patients WHERE 1=1`;
+  let params = [];
+
+  if (today === 'true') {
+    const todayStr = getTodayDate();
+    query += ` AND date(registration_date) = ?`;
+    params.push(todayStr);
+  } else if (from_date && to_date) {
+    query += ` AND date(registration_date) BETWEEN ? AND ?`;
+    params.push(from_date, to_date);
+  }
+
+  if (search) {
+    query += ` AND (patient_code LIKE ? OR patient_name LIKE ? OR mobile LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+
+  query += ` ORDER BY id DESC`;
+
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+app.get('/api/patients/code/:code', (req, res) => {
+  const code = req.params.code;
+  db.get(`SELECT * FROM patients WHERE patient_code = ?`, [code], (err, row) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (!row) return res.status(404).json({ success: false, message: 'Patient not found' });
+    res.json({ success: true, data: row });
+  });
+});
+
+app.post('/api/patients', (req, res) => {
+  const { patient_name, age, gender, mobile, address } = req.body;
+  if (!patient_name) return res.status(400).json({ success: false, message: 'Patient Name is required' });
+
+  // Generate Patient Code: KNC001 + 6 digit sequential ID
+  db.get(`SELECT MAX(id) as max_id FROM patients`, (err, row) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    const nextId = (row && row.max_id ? row.max_id : 0) + 1;
+    const patient_code = `KNC001${String(nextId).padStart(6, '0')}`;
+    const registration_date = new Date().toISOString();
+
+    db.run(
+      `INSERT INTO patients (patient_code, patient_name, age, gender, mobile, address, registration_date) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [patient_code, patient_name, age, gender, mobile, address, registration_date],
+      function(err) {
+        if (err) return res.status(500).json({ success: false, message: err.message });
+        res.json({ success: true, data: { id: this.lastID, patient_code, patient_name } });
+      }
+    );
+  });
+});
+
+app.put('/api/patients/:id', (req, res) => {
+  const { id } = req.params;
+  const { patient_name, age, gender, mobile, address } = req.body;
+  db.run(
+    `UPDATE patients SET patient_name = ?, age = ?, gender = ?, mobile = ?, address = ? WHERE id = ?`,
+    [patient_name, age, gender, mobile, address, id],
+    function(err) {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, message: 'Patient updated successfully' });
+    }
+  );
+});
+
+app.delete('/api/patients/:id', (req, res) => {
+  const { id } = req.params;
+  db.run(`DELETE FROM patients WHERE id = ?`, [id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, message: 'Patient deleted successfully' });
+  });
+});
+
+// -----------------------------------------------------------------------
+// DOCTORS API
+// -----------------------------------------------------------------------
+app.get('/api/doctors', (req, res) => {
+  db.all(`SELECT * FROM doctors ORDER BY doctor_name`, [], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+app.post('/api/doctors', (req, res) => {
+  const { doctor_name, qualification, mobile, consultation_fee, status } = req.body;
+  if (!doctor_name) return res.status(400).json({ success: false, message: 'Doctor Name is required' });
+
+  db.run(
+    `INSERT INTO doctors (doctor_name, qualification, mobile, consultation_fee, status) VALUES (?, ?, ?, ?, ?)`,
+    [doctor_name, qualification, mobile, consultation_fee || 0, status || 'Active'],
+    function(err) {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, data: { id: this.lastID } });
+    }
+  );
+});
+
+app.put('/api/doctors/:id', (req, res) => {
+  const { id } = req.params;
+  const { doctor_name, qualification, mobile, consultation_fee, status } = req.body;
+  db.run(
+    `UPDATE doctors SET doctor_name = ?, qualification = ?, mobile = ?, consultation_fee = ?, status = ? WHERE id = ?`,
+    [doctor_name, qualification, mobile, consultation_fee, status, id],
+    function(err) {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, message: 'Doctor updated successfully' });
+    }
+  );
+});
+
+app.delete('/api/doctors/:id', (req, res) => {
+  const { id } = req.params;
+  db.run(`DELETE FROM doctors WHERE id = ?`, [id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, message: 'Doctor deleted successfully' });
+  });
+});
+
+// -----------------------------------------------------------------------
+// MEDICINES API
+// -----------------------------------------------------------------------
+app.get('/api/medicines', (req, res) => {
+  const { search, low_stock, expiry_alert } = req.query;
+  let query = `SELECT * FROM medicines WHERE 1=1`;
+  let params = [];
+
+  if (search) {
+    query += ` AND (medicine_name LIKE ? OR generic_name LIKE ? OR batch_number LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+  if (low_stock === 'true') {
+    query += ` AND current_stock <= minimum_stock`;
+  }
+  if (expiry_alert === 'true') {
+    const today = getTodayDate();
+    query += ` AND expiry_date <= date('now', '+30 days')`;
+  }
+
+  query += ` ORDER BY medicine_name`;
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+app.post('/api/medicines', (req, res) => {
+  const { medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status } = req.body;
+  if (!medicine_name) return res.status(400).json({ success: false, message: 'Medicine Name is required' });
+
+  db.run(
+    `INSERT INTO medicines (medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate || 0, mrp || 0, current_stock || 0, minimum_stock || 10, status || 'Active'],
+    function(err) {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, data: { id: this.lastID } });
+    }
+  );
+});
+
+app.put('/api/medicines/:id', (req, res) => {
+  const { id } = req.params;
+  const { medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status } = req.body;
+  db.run(
+    `UPDATE medicines SET medicine_name = ?, generic_name = ?, hsn_number = ?, batch_number = ?, expiry_date = ?, rate = ?, mrp = ?, current_stock = ?, minimum_stock = ?, status = ? WHERE id = ?`,
+    [medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status, id],
+    function(err) {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, message: 'Medicine updated successfully' });
+    }
+  );
+});
+
+app.delete('/api/medicines/:id', (req, res) => {
+  const { id } = req.params;
+  db.run(`DELETE FROM medicines WHERE id = ?`, [id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, message: 'Medicine deleted successfully' });
+  });
+});
+
+// -----------------------------------------------------------------------
+// OP BOOKING & HISTORY API
+// -----------------------------------------------------------------------
+app.post('/api/op/save', (req, res) => {
+  const { op_date, patient_id, doctor_id, consultation_fee, payment_mode, remarks } = req.body;
+  const dateStr = op_date || getTodayDate();
+
+  // Get token number for date
+  db.get(`SELECT last_token FROM op_token_counter WHERE date = ?`, [dateStr], (err, row) => {
+    let token_number = 1;
+    if (row) {
+      token_number = row.last_token + 1;
+      db.run(`UPDATE op_token_counter SET last_token = ? WHERE date = ?`, [token_number, dateStr]);
+    } else {
+      db.run(`INSERT INTO op_token_counter (date, last_token) VALUES (?, ?)`, [dateStr, 1]);
+    }
+
+    const op_bill_id = `OP-${dateStr.replace(/-/g, '')}-${String(token_number).padStart(3, '0')}`;
+
+    db.run(
+      `INSERT INTO op_bills (op_bill_id, op_date, token_number, patient_id, doctor_id, consultation_fee, payment_mode, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [op_bill_id, dateStr, token_number, patient_id, doctor_id, consultation_fee || 0, payment_mode || 'Cash', remarks || ''],
+      function(err) {
+        if (err) return res.status(500).json({ success: false, message: err.message });
+        res.json({ success: true, data: { id: this.lastID, op_bill_id, token_number } });
+      }
+    );
+  });
+});
+
+app.get('/api/op/history', (req, res) => {
+  const { from_date, to_date, today, search, doctor_id } = req.query;
+  let query = `
+    SELECT o.*, p.patient_code, p.patient_name, p.age, p.gender, p.mobile, d.doctor_name
+    FROM op_bills o
+    JOIN patients p ON o.patient_id = p.id
+    JOIN doctors d ON o.doctor_id = d.id
+    WHERE 1=1
+  `;
+  let params = [];
+
+  if (today === 'true') {
+    query += ` AND o.op_date = ?`;
+    params.push(getTodayDate());
+  } else if (from_date && to_date) {
+    query += ` AND o.op_date BETWEEN ? AND ?`;
+    params.push(from_date, to_date);
+  }
+
+  if (search) {
+    query += ` AND (p.patient_code LIKE ? OR p.patient_name LIKE ? OR p.mobile LIKE ? OR o.op_bill_id LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+  }
+
+  if (doctor_id) {
+    query += ` AND o.doctor_id = ?`;
+    params.push(doctor_id);
+  }
+
+  query += ` ORDER BY o.id DESC`;
+
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+app.get('/api/op/print/:id', (req, res) => {
+  const { id } = req.params;
+  const query = `
+    SELECT o.*, p.patient_code, p.patient_name, p.age, p.gender, p.mobile, p.address, d.doctor_name, d.qualification
+    FROM op_bills o
+    JOIN patients p ON o.patient_id = p.id
+    JOIN doctors d ON o.doctor_id = d.id
+    WHERE o.id = ?
+  `;
+  db.get(query, [id], (err, row) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (!row) return res.status(404).json({ success: false, message: 'OP Bill not found' });
+    res.json({ success: true, data: row });
+  });
+});
+
+app.delete('/api/op/:id', (req, res) => {
+  const { id } = req.params;
+  db.run(`DELETE FROM op_bills WHERE id = ?`, [id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, message: 'OP Bill deleted successfully' });
+  });
+});
+
+// -----------------------------------------------------------------------
+// PURCHASE API & STOCK INCREMENT
+// -----------------------------------------------------------------------
+app.post('/api/purchase/save', (req, res) => {
+  const { invoice_no, supplier_name, invoice_date, items } = req.body;
+  if (!items || items.length === 0) return res.status(400).json({ success: false, message: 'No purchase items provided' });
+
+  let grand_total = 0;
+  items.forEach(item => {
+    grand_total += (item.qty * item.rate);
+  });
+
+  db.serialize(() => {
+    db.run(`BEGIN TRANSACTION`);
+
+    db.run(
+      `INSERT INTO purchases (invoice_no, supplier_name, invoice_date, grand_total) VALUES (?, ?, ?, ?)`,
+      [invoice_no, supplier_name, invoice_date || getTodayDate(), grand_total],
+      function(err) {
+        if (err) {
+          db.run(`ROLLBACK`);
+          return res.status(500).json({ success: false, message: err.message });
+        }
+        const purchase_id = this.lastID;
+        let completed = 0;
+        let hasError = false;
+
+        items.forEach(item => {
+          const amount = item.qty * item.rate;
+          
+          // Check if medicine already exists or create/update
+          db.get(`SELECT id, current_stock FROM medicines WHERE id = ?`, [item.medicine_id], (err, med) => {
+            if (hasError) return;
+            if (err) {
+              hasError = true;
+              db.run(`ROLLBACK`);
+              return res.status(500).json({ success: false, message: err.message });
+            }
+
+            db.run(
+              `INSERT INTO purchase_items (purchase_id, medicine_id, batch, expiry, qty, hsn, rate, mrp, amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [purchase_id, item.medicine_id, item.batch, item.expiry, item.qty, item.hsn, item.rate, item.mrp, amount],
+              (err) => {
+                if (err && !hasError) {
+                  hasError = true;
+                  db.run(`ROLLBACK`);
+                  return res.status(500).json({ success: false, message: err.message });
+                }
+
+                // Increase medicine stock and update batch/expiry/rate/mrp
+                db.run(
+                  `UPDATE medicines SET current_stock = current_stock + ?, batch_number = ?, expiry_date = ?, rate = ?, mrp = ? WHERE id = ?`,
+                  [item.qty, item.batch, item.expiry, item.rate, item.mrp, item.medicine_id],
+                  (err) => {
+                    if (err && !hasError) {
+                      hasError = true;
+                      db.run(`ROLLBACK`);
+                      return res.status(500).json({ success: false, message: err.message });
+                    }
+
+                    completed++;
+                    if (completed === items.length && !hasError) {
+                      db.run(`COMMIT`);
+                      res.json({ success: true, data: { purchase_id, grand_total } });
+                    }
+                  }
+                );
+              }
+            );
+          });
+        });
+      }
+    );
+  });
+});
+
+app.get('/api/purchase/history', (req, res) => {
+  const { from_date, to_date, today, search } = req.query;
+  let query = `
+    SELECT p.id as purchase_id, p.invoice_no, p.supplier_name, p.invoice_date, p.grand_total,
+           pi.batch, pi.expiry, pi.qty, pi.rate, pi.mrp, pi.amount, pi.hsn,
+           m.medicine_name, m.generic_name, m.id as medicine_id
+    FROM purchases p
+    JOIN purchase_items pi ON p.id = pi.purchase_id
+    JOIN medicines m ON pi.medicine_id = m.id
+    WHERE 1=1
+  `;
+  let params = [];
+
+  if (today === 'true') {
+    query += ` AND p.invoice_date = ?`;
+    params.push(getTodayDate());
+  } else if (from_date && to_date) {
+    query += ` AND p.invoice_date BETWEEN ? AND ?`;
+    params.push(from_date, to_date);
+  }
+
+  if (search) {
+    query += ` AND (p.invoice_no LIKE ? OR p.supplier_name LIKE ? OR m.medicine_name LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+
+  query += ` ORDER BY p.id DESC`;
+
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+app.get('/api/purchase/print/:id', (req, res) => {
+  const { id } = req.params;
+  db.get(`SELECT * FROM purchases WHERE id = ?`, [id], (err, purchase) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (!purchase) return res.status(404).json({ success: false, message: 'Purchase not found' });
+
+    db.all(`
+      SELECT pi.*, m.medicine_name, m.generic_name
+      FROM purchase_items pi
+      JOIN medicines m ON pi.medicine_id = m.id
+      WHERE pi.purchase_id = ?
+    `, [id], (err, items) => {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, data: { ...purchase, items } });
+    });
+  });
+});
+
+app.delete('/api/purchase/:id', (req, res) => {
+  const { id } = req.params;
+  // Reverse stock before deleting purchase items
+  db.all(`SELECT medicine_id, qty FROM purchase_items WHERE purchase_id = ?`, [id], (err, items) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+
+    db.serialize(() => {
+      db.run(`BEGIN TRANSACTION`);
+      let hasError = false;
+
+      items.forEach(item => {
+        db.run(`UPDATE medicines SET current_stock = current_stock - ? WHERE id = ?`, [item.qty, item.medicine_id], (err) => {
+          if (err) hasError = true;
+        });
+      });
+
+      db.run(`DELETE FROM purchase_items WHERE purchase_id = ?`, [id], (err) => {
+        if (err) hasError = true;
+      });
+      db.run(`DELETE FROM purchases WHERE id = ?`, [id], (err) => {
+        if (err) hasError = true;
+      });
+
+      if (hasError) {
+        db.run(`ROLLBACK`);
+        res.status(500).json({ success: false, message: 'Error deleting purchase and reversing stock' });
+      } else {
+        db.run(`COMMIT`);
+        res.json({ success: true, message: 'Purchase deleted and stock reversed successfully' });
+      }
+    });
+  });
+});
+
+// -----------------------------------------------------------------------
+// MEDICAL BILLING API & STOCK DECREMENT
+// -----------------------------------------------------------------------
+app.post('/api/medicalbill/save', (req, res) => {
+  const { bill_date, patient_id, discount_percent, items } = req.body;
+  if (!items || items.length === 0) return res.status(400).json({ success: false, message: 'No items in medical bill' });
+  if (!patient_id) return res.status(400).json({ success: false, message: 'Patient Code / ID is required' });
+
+  // Verify stock for all items first
+  let subtotal = 0;
+  let itemsProcessed = 0;
+  let stockError = null;
+
+  items.forEach(item => {
+    db.get(`SELECT current_stock, medicine_name FROM medicines WHERE id = ?`, [item.medicine_id], (err, med) => {
+      if (err) stockError = err.message;
+      if (!med) stockError = `Medicine ID ${item.medicine_id} not found`;
+      if (med && med.current_stock < item.qty) {
+        stockError = `Insufficient stock for ${med.medicine_name}. Available: ${med.current_stock}, Requested: ${item.qty}`;
+      }
+
+      itemsProcessed++;
+      if (itemsProcessed === items.length) {
+        if (stockError) {
+          return res.status(400).json({ success: false, message: stockError });
+        }
+
+        // Proceed with saving bill and decrementing stock
+        const dateStr = bill_date || getTodayDate();
+        
+        // Generate Bill No
+        db.get(`SELECT COUNT(*) as count FROM medical_bills`, (err, row) => {
+          const billNoNum = (row ? row.count : 0) + 1;
+          const bill_no = `MED-${dateStr.replace(/-/g, '')}-${String(billNoNum).padStart(4, '0')}`;
+
+          items.forEach(i => {
+            subtotal += (i.qty * i.rate);
+          });
+
+          const discPct = discount_percent ? parseFloat(discount_percent) : 0;
+          const discount_amount = (subtotal * discPct) / 100;
+          const grand_total = subtotal - discount_amount;
+
+          db.serialize(() => {
+            db.run(`BEGIN TRANSACTION`);
+            let hasError = false;
+
+            db.run(
+              `INSERT INTO medical_bills (bill_no, bill_date, patient_id, subtotal, discount_percent, discount_amount, grand_total) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [bill_no, dateStr, patient_id, subtotal, discPct, discount_amount, grand_total],
+              function(err) {
+                if (err) {
+                  hasError = true;
+                  db.run(`ROLLBACK`);
+                  return res.status(500).json({ success: false, message: err.message });
+                }
+
+                const medical_bill_id = this.lastID;
+                let savedItems = 0;
+
+                items.forEach(i => {
+                  const amt = i.qty * i.rate;
+                  db.run(
+                    `INSERT INTO medical_bill_items (medical_bill_id, medicine_id, batch, expiry, qty, rate, amount) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [medical_bill_id, i.medicine_id, i.batch || '', i.expiry || '', i.qty, i.rate, amt],
+                    (err) => {
+                      if (err) hasError = true;
+                    }
+                  );
+
+                  db.run(
+                    `UPDATE medicines SET current_stock = current_stock - ? WHERE id = ?`,
+                    [i.qty, i.medicine_id],
+                    (err) => {
+                      if (err) hasError = true;
+                      savedItems++;
+                      if (savedItems === items.length) {
+                        if (hasError) {
+                          db.run(`ROLLBACK`);
+                          res.status(500).json({ success: false, message: 'Error saving medical bill' });
+                        } else {
+                          db.run(`COMMIT`);
+                          res.json({ success: true, data: { medical_bill_id, bill_no, grand_total } });
+                        }
+                      }
+                    }
+                  );
+                });
+              }
+            );
+          });
+        });
+      }
+    });
+  });
+});
+
+app.get('/api/medicalbill/history', (req, res) => {
+  const { from_date, to_date, today, search } = req.query;
+  let query = `
+    SELECT mb.*, p.patient_code, p.patient_name, p.age, p.gender, p.mobile
+    FROM medical_bills mb
+    JOIN patients p ON mb.patient_id = p.id
+    WHERE 1=1
+  `;
+  let params = [];
+
+  if (today === 'true') {
+    query += ` AND mb.bill_date = ?`;
+    params.push(getTodayDate());
+  } else if (from_date && to_date) {
+    query += ` AND mb.bill_date BETWEEN ? AND ?`;
+    params.push(from_date, to_date);
+  }
+
+  if (search) {
+    query += ` AND (mb.bill_no LIKE ? OR p.patient_code LIKE ? OR p.patient_name LIKE ? OR p.mobile LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+  }
+
+  query += ` ORDER BY mb.id DESC`;
+
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+app.get('/api/medicalbill/print/:id', (req, res) => {
+  const { id } = req.params;
+  const query = `
+    SELECT mb.*, p.patient_code, p.patient_name, p.age, p.gender, p.mobile, p.address
+    FROM medical_bills mb
+    JOIN patients p ON mb.patient_id = p.id
+    WHERE mb.id = ?
+  `;
+  db.get(query, [id], (err, bill) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (!bill) return res.status(404).json({ success: false, message: 'Medical Bill not found' });
+
+    db.all(`
+      SELECT mbi.*, m.medicine_name, m.generic_name
+      FROM medical_bill_items mbi
+      JOIN medicines m ON mbi.medicine_id = m.id
+      WHERE mbi.medical_bill_id = ?
+    `, [id], (err, items) => {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, data: { ...bill, items } });
+    });
+  });
+});
+
+app.delete('/api/medicalbill/:id', (req, res) => {
+  const { id } = req.params;
+  // Restore stock before deleting bill
+  db.all(`SELECT medicine_id, qty FROM medical_bill_items WHERE medical_bill_id = ?`, [id], (err, items) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+
+    db.serialize(() => {
+      db.run(`BEGIN TRANSACTION`);
+      let hasError = false;
+
+      items.forEach(item => {
+        db.run(`UPDATE medicines SET current_stock = current_stock + ? WHERE id = ?`, [item.qty, item.medicine_id], (err) => {
+          if (err) hasError = true;
+        });
+      });
+
+      db.run(`DELETE FROM medical_bill_items WHERE medical_bill_id = ?`, [id], (err) => {
+        if (err) hasError = true;
+      });
+      db.run(`DELETE FROM medical_bills WHERE id = ?`, [id], (err) => {
+        if (err) hasError = true;
+      });
+
+      if (hasError) {
+        db.run(`ROLLBACK`);
+        res.status(500).json({ success: false, message: 'Error deleting bill and restoring stock' });
+      } else {
+        db.run(`COMMIT`);
+        res.json({ success: true, message: 'Medical bill deleted and stock restored successfully' });
+      }
+    });
+  });
+});
+
+// -----------------------------------------------------------------------
+// MEDICINE RETURNS API
+// -----------------------------------------------------------------------
+app.post('/api/returns', (req, res) => {
+  const { return_date, medicine_id, batch, qty, reason, supplier } = req.body;
+  if (!medicine_id || !qty) return res.status(400).json({ success: false, message: 'Medicine and Qty are required' });
+
+  db.get(`SELECT current_stock, medicine_name FROM medicines WHERE id = ?`, [medicine_id], (err, med) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (!med) return res.status(404).json({ success: false, message: 'Medicine not found' });
+    if (med.current_stock < qty) {
+      return res.status(400).json({ success: false, message: `Cannot return ${qty}. Current stock is only ${med.current_stock}` });
+    }
+
+    db.serialize(() => {
+      db.run(`BEGIN TRANSACTION`);
+      db.run(
+        `INSERT INTO medicine_returns (return_date, medicine_id, batch, qty, reason, supplier) VALUES (?, ?, ?, ?, ?, ?)`,
+        [return_date || getTodayDate(), medicine_id, batch || '', qty, reason || '', supplier || ''],
+        function(err) {
+          if (err) {
+            db.run(`ROLLBACK`);
+            return res.status(500).json({ success: false, message: err.message });
+          }
+          db.run(`UPDATE medicines SET current_stock = current_stock - ? WHERE id = ?`, [qty, medicine_id], (err) => {
+            if (err) {
+              db.run(`ROLLBACK`);
+              return res.status(500).json({ success: false, message: err.message });
+            }
+            db.run(`COMMIT`);
+            res.json({ success: true, message: 'Medicine return saved and stock updated' });
+          });
+        }
+      );
+    });
+  });
+});
+
+app.get('/api/returns', (req, res) => {
+  db.all(`
+    SELECT r.*, m.medicine_name, m.generic_name
+    FROM medicine_returns r
+    JOIN medicines m ON r.medicine_id = m.id
+    ORDER BY r.id DESC
+  `, [], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+// -----------------------------------------------------------------------
+// REPORTS & DASHBOARD SUMMARY API
+// -----------------------------------------------------------------------
+app.get('/api/dashboard/summary', (req, res) => {
+  const today = getTodayDate();
+  const summary = {};
+
+  db.get(`SELECT COUNT(*) as cnt FROM op_bills WHERE op_date = ?`, [today], (err, row) => {
+    summary.todays_op_count = row ? row.cnt : 0;
+
+    db.get(`SELECT COUNT(DISTINCT patient_id) as cnt FROM op_bills WHERE op_date = ?`, [today], (err, row) => {
+      summary.todays_patients = row ? row.cnt : 0;
+
+      db.get(`SELECT COUNT(*) as cnt, SUM(grand_total) as total FROM medical_bills WHERE bill_date = ?`, [today], (err, row) => {
+        summary.todays_medical_bills = row ? row.cnt : 0;
+        summary.todays_medical_collection = row && row.total ? row.total : 0;
+
+        db.get(`SELECT SUM(grand_total) as total FROM purchases WHERE invoice_date = ?`, [today], (err, row) => {
+          summary.todays_purchase = row && row.total ? row.total : 0;
+
+          db.get(`SELECT COUNT(*) as cnt FROM patients`, (err, row) => {
+            summary.total_patients = row ? row.cnt : 0;
+
+            db.get(`SELECT COUNT(*) as cnt FROM medicines WHERE current_stock <= minimum_stock`, (err, row) => {
+              summary.low_stock_medicines = row ? row.cnt : 0;
+
+              db.get(`SELECT COUNT(*) as cnt FROM medicines WHERE expiry_date <= date('now', '+30 days')`, (err, row) => {
+                summary.expiring_medicines = row ? row.cnt : 0;
+
+                res.json({ success: true, data: summary });
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
+app.get('/api/reports/:type', (req, res) => {
+  const type = req.params.type;
+  const { from_date, to_date, today } = req.query;
+  let dateFilterCol = 'op_date';
+  let query = '';
+
+  if (type === 'todays_op' || type === 'op_collection') {
+    query = `
+      SELECT o.op_bill_id as ref_no, o.op_date as bill_date, p.patient_code, p.patient_name, p.mobile, d.doctor_name, o.consultation_fee as amount, o.payment_mode
+      FROM op_bills o
+      JOIN patients p ON o.patient_id = p.id
+      JOIN doctors d ON o.doctor_id = d.id
+      WHERE 1=1
+    `;
+    if (today === 'true') query += ` AND o.op_date = '${getTodayDate()}'`;
+    else if (from_date && to_date) query += ` AND o.op_date BETWEEN '${from_date}' AND '${to_date}'`;
+  } else if (type === 'medical_sales') {
+    query = `
+      SELECT mb.bill_no as ref_no, mb.bill_date, p.patient_code, p.patient_name, p.mobile, mb.subtotal, mb.discount_amount, mb.grand_total as amount
+      FROM medical_bills mb
+      JOIN patients p ON mb.patient_id = p.id
+      WHERE 1=1
+    `;
+    if (today === 'true') query += ` AND mb.bill_date = '${getTodayDate()}'`;
+    else if (from_date && to_date) query += ` AND mb.bill_date BETWEEN '${from_date}' AND '${to_date}'`;
+  } else if (type === 'purchase') {
+    query = `
+      SELECT p.invoice_no as ref_no, p.invoice_date as bill_date, p.supplier_name, p.grand_total as amount
+      FROM purchases p
+      WHERE 1=1
+    `;
+    if (today === 'true') query += ` AND p.invoice_date = '${getTodayDate()}'`;
+    else if (from_date && to_date) query += ` AND p.invoice_date BETWEEN '${from_date}' AND '${to_date}'`;
+  } else if (type === 'stock') {
+    query = `SELECT * FROM medicines ORDER BY medicine_name`;
+  } else if (type === 'low_stock') {
+    query = `SELECT * FROM medicines WHERE current_stock <= minimum_stock ORDER BY medicine_name`;
+  } else if (type === 'expiry') {
+    query = `SELECT * FROM medicines WHERE expiry_date <= date('now', '+30 days') ORDER BY expiry_date`;
+  } else if (type === 'patient_report') {
+    query = `SELECT * FROM patients ORDER BY id DESC`;
+  } else if (type === 'doctor_report') {
+    query = `SELECT * FROM doctors ORDER BY doctor_name`;
+  } else if (type === 'daily_collection') {
+    query = `
+      SELECT bill_date, SUM(grand_total) as total_collection 
+      FROM (
+        SELECT op_date as bill_date, consultation_fee as grand_total FROM op_bills
+        UNION ALL
+        SELECT bill_date, grand_total FROM medical_bills
+      )
+      GROUP BY bill_date
+      ORDER BY bill_date DESC
+    `;
+  } else {
+    return res.status(400).json({ success: false, message: 'Invalid report type' });
+  }
+
+  db.all(query, [], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Clinic Management System running on http://localhost:${PORT}`);
+});

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OP Receipt - Kurnool Neuro Psychiatric and ENT Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @media print {
+      body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-white text-gray-800 p-8">
+  <div class="max-w-xl mx-auto bg-white p-6 border rounded-lg shadow-sm" id="printArea" data-testid="op-print-container">
+    <!-- Header -->
+    <div class="text-center border-b pb-4 mb-4">
+      <h1 class="text-2xl font-bold text-blue-950">Kurnool Neuro Psychiatric and ENT Center</h1>
+      <p class="text-sm text-gray-600">Specialized Neuro, Psychiatric & ENT Care Hospital</p>
+      <p class="text-xs text-gray-500">Main Road, Kurnool, Andhra Pradesh - 518001</p>
+    </div>
+
+    <div class="text-center mb-6 bg-blue-50 py-3 rounded border border-blue-200">
+      <p class="text-xs font-bold text-blue-800 uppercase tracking-wider">Outpatient Token Number</p>
+      <div class="text-4xl font-extrabold text-blue-900 mt-1" id="tokenNumber">--</div>
+    </div>
+
+    <!-- OP Meta -->
+    <div class="grid grid-cols-2 gap-4 mb-6 text-sm">
+      <div>
+        <p><span class="font-semibold">OP Bill ID:</span> <span id="opBillId">--</span></p>
+        <p><span class="font-semibold">OP Date:</span> <span id="opDate">--</span></p>
+        <p><span class="font-semibold">Payment Mode:</span> <span id="paymentMode">--</span></p>
+      </div>
+      <div class="text-right">
+        <p><span class="font-semibold">Patient Code:</span> <span id="patientCode">--</span></p>
+        <p><span class="font-semibold">Patient Name:</span> <span id="patientName">--</span></p>
+        <p><span class="font-semibold">Age / Gender:</span> <span id="ageGender">--</span></p>
+        <p><span class="font-semibold">Mobile:</span> <span id="mobile">--</span></p>
+      </div>
+    </div>
+
+    <!-- Doctor & Fee -->
+    <div class="border-t border-b py-4 mb-6 text-sm space-y-2">
+      <p><span class="font-semibold">Consulting Doctor:</span> <span id="doctorName" class="font-bold text-blue-900">--</span> (<span id="doctorQual">--</span>)</p>
+      <p class="flex justify-between text-base font-bold text-gray-800 pt-2 border-t">
+        <span>Consultation Fee:</span>
+        <span id="consultationFee" class="text-blue-600">₹0.00</span>
+      </p>
+    </div>
+
+    <!-- Footer Signature -->
+    <div class="flex justify-between items-end pt-6 text-xs text-gray-500">
+      <div>
+        <p>Please present token at consultation room.</p>
+        <p>Get well soon!</p>
+      </div>
+      <div class="text-center">
+        <div class="h-10"></div>
+        <p class="border-t pt-1 font-semibold text-gray-700">Authorized Signature</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Print Button -->
+  <div class="text-center mt-6 no-print">
+    <button onclick="window.print()" class="bg-blue-600 text-white px-6 py-2.5 rounded font-bold hover:bg-blue-700 shadow" data-testid="print-action-btn">
+      <i class="fa fa-print mr-2"></i> Print OP Receipt
+    </button>
+    <a href="ophistory.html" class="ml-3 bg-gray-200 text-gray-700 px-4 py-2.5 rounded font-medium hover:bg-gray-300">Back to OP History</a>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+  <script>
+    async function loadOpPrint() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const id = urlParams.get('id');
+      if (!id) return alert('OP ID not provided');
+
+      try {
+        const res = await fetch(`/api/op/print/${id}`);
+        const json = await res.json();
+        if (json.success) {
+          const o = json.data;
+          document.getElementById('tokenNumber').innerText = o.token_number;
+          document.getElementById('opBillId').innerText = o.op_bill_id;
+          document.getElementById('opDate').innerText = o.op_date;
+          document.getElementById('paymentMode').innerText = o.payment_mode;
+          document.getElementById('patientCode').innerText = o.patient_code;
+          document.getElementById('patientName').innerText = o.patient_name;
+          document.getElementById('ageGender').innerText = `${o.age || '-'} / ${o.gender || '-'}`;
+          document.getElementById('mobile').innerText = o.mobile || '-';
+          document.getElementById('doctorName').innerText = o.doctor_name;
+          document.getElementById('doctorQual').innerText = o.qualification || '';
+          document.getElementById('consultationFee').innerText = '₹' + (o.consultation_fee || 0).toFixed(2);
+        } else {
+          alert(json.message);
+        }
+      } catch (err) {
+        console.error('Error loading OP print', err);
+      }
+    }
+    loadOpPrint();
+  </script>
+</body>
+</html>

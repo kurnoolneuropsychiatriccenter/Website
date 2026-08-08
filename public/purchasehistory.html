@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Purchase History - Kurnool Neuro Psychiatric and ENT Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Purchase History</h1>
+      </div>
+      <div class="space-x-3">
+        <a href="purchase.html" class="bg-green-600 px-3 py-1.5 rounded text-sm font-medium hover:bg-green-700"><i class="fa fa-plus mr-1"></i> New Purchase</a>
+        <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6">
+    <!-- Filters -->
+    <div class="bg-white p-4 rounded-lg shadow mb-6 flex flex-wrap items-center gap-4">
+      <div class="flex items-center gap-2">
+        <label class="text-sm font-medium">From:</label>
+        <input type="date" id="fromDate" class="border px-3 py-1.5 rounded text-sm focus:outline-blue-500" data-testid="from-date-input">
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-sm font-medium">To:</label>
+        <input type="date" id="toDate" class="border px-3 py-1.5 rounded text-sm focus:outline-blue-500" data-testid="to-date-input">
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="text" id="searchInput" placeholder="Invoice No, Supplier, Medicine..." class="border px-3 py-2 rounded text-sm w-64 focus:outline-blue-500" data-testid="search-input">
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-sm font-medium flex items-center gap-1">
+          <input type="checkbox" id="todayFilter" checked onchange="loadPurchaseHistory()" data-testid="today-filter"> Today
+        </label>
+      </div>
+      <button onclick="loadPurchaseHistory()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700" data-testid="filter-btn"><i class="fa fa-filter mr-1"></i> Apply Filter</button>
+    </div>
+
+    <!-- Purchase History Table -->
+    <div class="bg-white rounded-lg shadow overflow-x-auto">
+      <table class="w-full text-left border-collapse" data-testid="purchase-history-table">
+        <thead>
+          <tr class="bg-blue-50 text-blue-900 border-b text-xs">
+            <th class="p-3">Invoice No</th>
+            <th class="p-3">Date</th>
+            <th class="p-3">Supplier</th>
+            <th class="p-3">Medicine</th>
+            <th class="p-3">Batch</th>
+            <th class="p-3">Expiry</th>
+            <th class="p-3">Qty</th>
+            <th class="p-3">Rate</th>
+            <th class="p-3">MRP</th>
+            <th class="p-3">Amount</th>
+            <th class="p-3 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="purchaseHistoryBody" class="divide-y text-sm">
+          <tr><td colspan="11" class="p-6 text-center text-gray-500">Loading purchase history...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    async function loadPurchaseHistory() {
+      const today = document.getElementById('todayFilter').checked;
+      const from_date = document.getElementById('fromDate').value;
+      const to_date = document.getElementById('toDate').value;
+      const search = document.getElementById('searchInput').value;
+
+      let url = `/api/purchase/history?today=${today}`;
+      if (!today && from_date && to_date) {
+        url = `/api/purchase/history?from_date=${from_date}&to_date=${to_date}&today=false`;
+      }
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        const tbody = document.getElementById('purchaseHistoryBody');
+        tbody.innerHTML = '';
+
+        if (json.success && json.data.length > 0) {
+          json.data.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="p-3 font-semibold text-blue-600">${p.invoice_no}</td>
+              <td class="p-3">${p.invoice_date}</td>
+              <td class="p-3 font-medium">${p.supplier_name}</td>
+              <td class="p-3">${p.medicine_name}</td>
+              <td class="p-3">${p.batch || '-'}</td>
+              <td class="p-3">${p.expiry || '-'}</td>
+              <td class="p-3 font-bold">${p.qty}</td>
+              <td class="p-3">₹${p.rate}</td>
+              <td class="p-3">₹${p.mrp}</td>
+              <td class="p-3 font-semibold text-green-700">₹${p.amount}</td>
+              <td class="p-3 text-center space-x-2">
+                <button onclick="deletePurchase(${p.purchase_id})" class="text-red-600 hover:text-red-800" title="Delete & Reverse Stock" data-testid="delete-purchase-${p.purchase_id}"><i class="fa fa-trash"></i></button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        } else {
+          tbody.innerHTML = `<tr><td colspan="11" class="p-6 text-center text-gray-500">No purchase history found for selected filters.</td></tr>`;
+        }
+      } catch (err) {
+        console.error('Error loading purchase history', err);
+      }
+    }
+
+    async function deletePurchase(id) {
+      if (!confirm('Are you sure you want to delete this purchase? This will correctly REVERSE the stock quantity!')) return;
+      try {
+        const res = await fetch(`/api/purchase/${id}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (json.success) {
+          alert('Purchase deleted and stock reversed successfully.');
+          loadPurchaseHistory();
+        } else {
+          alert(json.message);
+        }
+      } catch (err) {
+        console.error('Error deleting purchase', err);
+      }
+    }
+
+    document.getElementById('fromDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('toDate').value = new Date().toISOString().split('T')[0];
+    loadPurchaseHistory();
+  </script>
+</body>
+</html>

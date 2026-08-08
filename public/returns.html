@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medicine Return - Kurnool Neuro Psychiatric and ENT Center</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Medicine Return to Supplier</h1>
+      </div>
+      <div>
+        <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6 max-w-4xl">
+    <form id="returnForm" onsubmit="saveReturn(event)">
+      <div class="bg-white p-6 rounded-lg shadow mb-6 space-y-4">
+        <h2 class="text-lg font-bold text-gray-800 border-b pb-2"><i class="fa fa-rotate-left mr-2 text-red-600"></i> Return Entry</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Return Date *</label>
+            <input type="date" id="returnDate" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="return-date-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Select Medicine *</label>
+            <select id="medicineSelect" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" onchange="onMedicineSelect()" data-testid="medicine-select">
+              <option value="">Select Medicine</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Batch Number</label>
+            <input type="text" id="batchNumber" class="w-full border px-3 py-2 rounded text-sm bg-gray-100" readonly data-testid="batch-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Current Stock Available</label>
+            <input type="text" id="availableStock" class="w-full border px-3 py-2 rounded text-sm bg-gray-100 font-bold text-blue-600" readonly data-testid="stock-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Return Qty *</label>
+            <input type="number" id="returnQty" min="1" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="return-qty-input">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Supplier Name</label>
+            <input type="text" id="supplierName" placeholder="Distributor name..." class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="supplier-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Reason for Return</label>
+            <input type="text" id="reason" placeholder="e.g. Expiring soon / Damaged..." class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="reason-input">
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end">
+        <button type="submit" class="bg-red-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-red-700 shadow text-lg" data-testid="save-return-btn">
+          <i class="fa fa-paper-plane mr-2"></i> Save Return & Decrease Stock
+        </button>
+      </div>
+    </form>
+
+    <!-- Return History -->
+    <div class="mt-8">
+      <h3 class="text-lg font-bold text-gray-800 mb-4">Recent Returns History</h3>
+      <div class="bg-white rounded-lg shadow overflow-x-auto">
+        <table class="w-full text-left border-collapse" data-testid="returns-table">
+          <thead>
+            <tr class="bg-blue-50 text-blue-900 border-b text-xs">
+              <th class="p-3">Date</th>
+              <th class="p-3">Medicine Name</th>
+              <th class="p-3">Batch</th>
+              <th class="p-3">Returned Qty</th>
+              <th class="p-3">Supplier</th>
+              <th class="p-3">Reason</th>
+            </tr>
+          </thead>
+          <tbody id="returnsTableBody" class="divide-y text-sm">
+            <tr><td colspan="6" class="p-4 text-center text-gray-500">Loading returns...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let medicinesList = [];
+
+    async function initReturns() {
+      document.getElementById('returnDate').value = new Date().toISOString().split('T')[0];
+      try {
+        const res = await fetch('/api/medicines');
+        const json = await res.json();
+        if (json.success) {
+          medicinesList = json.data;
+          const select = document.getElementById('medicineSelect');
+          medicinesList.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.setAttribute('data-batch', m.batch_number || '');
+            opt.setAttribute('data-stock', m.current_stock || 0);
+            opt.innerText = `${m.medicine_name} [Stock: ${m.current_stock}]`;
+            select.appendChild(opt);
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching medicines', err);
+      }
+      loadReturnsHistory();
+    }
+
+    function onMedicineSelect() {
+      const select = document.getElementById('medicineSelect');
+      const opt = select.options[select.selectedIndex];
+      if (opt && opt.value) {
+        document.getElementById('batchNumber').value = opt.getAttribute('data-batch') || '';
+        document.getElementById('availableStock').value = opt.getAttribute('data-stock') || 0;
+      }
+    }
+
+    async function saveReturn(e) {
+      e.preventDefault();
+      const medicine_id = document.getElementById('medicineSelect').value;
+      const qty = parseFloat(document.getElementById('returnQty').value);
+      const stock = parseFloat(document.getElementById('availableStock').value) || 0;
+
+      if (qty > stock) {
+        alert('Return quantity cannot exceed available stock!');
+        return;
+      }
+
+      const payload = {
+        return_date: document.getElementById('returnDate').value,
+        medicine_id: medicine_id,
+        batch: document.getElementById('batchNumber').value,
+        qty: qty,
+        reason: document.getElementById('reason').value,
+        supplier: document.getElementById('supplierName').value
+      };
+
+      try {
+        const res = await fetch('/api/returns', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert('Medicine return saved successfully and stock decreased.');
+          location.reload();
+        } else {
+          alert(json.message);
+        }
+      } catch (err) {
+        console.error('Error saving return', err);
+      }
+    }
+
+    async function loadReturnsHistory() {
+      try {
+        const res = await fetch('/api/returns');
+        const json = await res.json();
+        const tbody = document.getElementById('returnsTableBody');
+        tbody.innerHTML = '';
+        if (json.success && json.data.length > 0) {
+          json.data.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="p-3">${r.return_date}</td>
+              <td class="p-3 font-medium">${r.medicine_name}</td>
+              <td class="p-3">${r.batch || '-'}</td>
+              <td class="p-3 font-bold text-red-600">${r.qty}</td>
+              <td class="p-3">${r.supplier || '-'}</td>
+              <td class="p-3">${r.reason || '-'}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        } else {
+          tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-gray-500">No returns found.</td></tr>`;
+        }
+      } catch (err) {
+        console.error('Error loading returns', err);
+      }
+    }
+
+    initReturns();
+  </script>
+</body>
+</html>
