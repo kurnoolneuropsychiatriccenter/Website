@@ -591,34 +591,40 @@ app.get('/api/purchase/print/:id', (req, res) => {
 
 app.delete('/api/purchase/:id', (req, res) => {
   const { id } = req.params;
-  // Reverse stock before deleting purchase items
   db.all(`SELECT medicine_id, qty FROM purchase_items WHERE purchase_id = ?`, [id], (err, items) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
-
-    db.serialize(() => {
-      db.run(`BEGIN TRANSACTION`);
-      let hasError = false;
-
-      items.forEach(item => {
-        db.run(`UPDATE medicines SET current_stock = current_stock - ? WHERE id = ?`, [item.qty, item.medicine_id], (err) => {
-          if (err) hasError = true;
-        });
+    if (!items || items.length === 0) {
+      // Still try to delete the master row
+      db.run(`DELETE FROM purchases WHERE id = ?`, [id], function(e) {
+        if (e) return res.status(500).json({ success: false, message: e.message });
+        return res.json({ success: true, message: 'Purchase deleted successfully' });
       });
+      return;
+    }
 
-      db.run(`DELETE FROM purchase_items WHERE purchase_id = ?`, [id], (err) => {
-        if (err) hasError = true;
-      });
-      db.run(`DELETE FROM purchases WHERE id = ?`, [id], (err) => {
-        if (err) hasError = true;
-      });
-
-      if (hasError) {
-        db.run(`ROLLBACK`);
-        res.status(500).json({ success: false, message: 'Error deleting purchase and reversing stock' });
-      } else {
-        db.run(`COMMIT`);
-        res.json({ success: true, message: 'Purchase deleted and stock reversed successfully' });
-      }
+    let processed = 0;
+    let hasError = false;
+    items.forEach(item => {
+      db.run(
+        `UPDATE medicines SET current_stock = MAX(current_stock - ?, 0) WHERE id = ?`,
+        [item.qty, item.medicine_id],
+        (e) => {
+          if (e) hasError = true;
+          processed++;
+          if (processed === items.length) {
+            if (hasError) {
+              return res.status(500).json({ success: false, message: 'Error reversing stock' });
+            }
+            db.run(`DELETE FROM purchase_items WHERE purchase_id = ?`, [id], (e1) => {
+              if (e1) return res.status(500).json({ success: false, message: e1.message });
+              db.run(`DELETE FROM purchases WHERE id = ?`, [id], (e2) => {
+                if (e2) return res.status(500).json({ success: false, message: e2.message });
+                res.json({ success: true, message: 'Purchase deleted and stock reversed successfully' });
+              });
+            });
+          }
+        }
+      );
     });
   });
 });
@@ -777,34 +783,39 @@ app.get('/api/medicalbill/print/:id', (req, res) => {
 
 app.delete('/api/medicalbill/:id', (req, res) => {
   const { id } = req.params;
-  // Restore stock before deleting bill
   db.all(`SELECT medicine_id, qty FROM medical_bill_items WHERE medical_bill_id = ?`, [id], (err, items) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
-
-    db.serialize(() => {
-      db.run(`BEGIN TRANSACTION`);
-      let hasError = false;
-
-      items.forEach(item => {
-        db.run(`UPDATE medicines SET current_stock = current_stock + ? WHERE id = ?`, [item.qty, item.medicine_id], (err) => {
-          if (err) hasError = true;
-        });
+    if (!items || items.length === 0) {
+      db.run(`DELETE FROM medical_bills WHERE id = ?`, [id], function(e) {
+        if (e) return res.status(500).json({ success: false, message: e.message });
+        return res.json({ success: true, message: 'Medical bill deleted successfully' });
       });
+      return;
+    }
 
-      db.run(`DELETE FROM medical_bill_items WHERE medical_bill_id = ?`, [id], (err) => {
-        if (err) hasError = true;
-      });
-      db.run(`DELETE FROM medical_bills WHERE id = ?`, [id], (err) => {
-        if (err) hasError = true;
-      });
-
-      if (hasError) {
-        db.run(`ROLLBACK`);
-        res.status(500).json({ success: false, message: 'Error deleting bill and restoring stock' });
-      } else {
-        db.run(`COMMIT`);
-        res.json({ success: true, message: 'Medical bill deleted and stock restored successfully' });
-      }
+    let processed = 0;
+    let hasError = false;
+    items.forEach(item => {
+      db.run(
+        `UPDATE medicines SET current_stock = current_stock + ? WHERE id = ?`,
+        [item.qty, item.medicine_id],
+        (e) => {
+          if (e) hasError = true;
+          processed++;
+          if (processed === items.length) {
+            if (hasError) {
+              return res.status(500).json({ success: false, message: 'Error restoring stock' });
+            }
+            db.run(`DELETE FROM medical_bill_items WHERE medical_bill_id = ?`, [id], (e1) => {
+              if (e1) return res.status(500).json({ success: false, message: e1.message });
+              db.run(`DELETE FROM medical_bills WHERE id = ?`, [id], (e2) => {
+                if (e2) return res.status(500).json({ success: false, message: e2.message });
+                res.json({ success: true, message: 'Medical bill deleted and stock restored successfully' });
+              });
+            });
+          }
+        }
+      );
     });
   });
 });

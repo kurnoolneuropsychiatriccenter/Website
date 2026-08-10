@@ -1,0 +1,42 @@
+{
+  "summary": "Ran comprehensive backend end-to-end pytest (31 tests) against the Node/SQLite clinic app on localhost:3000. All 31 tests PASSED: dashboard summary, patients (auto-code KNC001000XXX), doctors, medicines, purchase (stock increment + batch/rate/mrp update), purchase history + delete-reverses-stock, OP booking (auto-token + op_bill_id), OP history/print/delete, medical billing (subtotal/discount/grand total math verified 45->40.5 with 10%, oversell blocked with 400+'Insufficient stock', patient_code visible in history), medical bill print with items, delete-restores-stock, medicine returns (over-stock blocked), all 10 report types. Frontend HTML loads correctly on preview URL (dashboard renders with all 8 summary tiles and 11 nav cards).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/* on preview URL (ingress)", "issue": "External REACT_APP_BACKEND_URL routes /api/* to FastAPI on port 8001 (returns {'detail':'Not Found'}) instead of the Node clinic server on port 3000. Result: dashboard tiles all read 0, and NO CRUD works when the app is accessed via the preview URL. All UI actions silently fail. Locally on port 3000 every endpoint works. This is a K8s ingress/routing config issue — either move the Node app to port 8001 (retire the FastAPI backend which is unused for this project) or reconfigure ingress to route /api to port 3000.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "/api/reports/:type", "issue": "SQL string interpolation of from_date/to_date/today into query text (not parameterized) — small SQL-injection surface. Non-blocking for a local single-user clinic app but should be parameterized."},
+      {"endpoint": "/api/medicalbill/save", "issue": "Bill number uses COUNT(*)+1 as sequence; if a bill is deleted the next new bill will collide on UNIQUE bill_no. Consider MAX(id)+1 or a per-date counter table like op_token_counter."},
+      {"endpoint": "/api/purchase/save", "issue": "grand_total is computed as qty*rate (pre-tax/pre-mrp). If business wants mrp-based totals this may be wrong — currently matches spec ('qty*rate')."},
+      {"endpoint": "/api/medicines?expiry_alert=true", "issue": "unused `today` variable, harmless."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "ALL flows via preview URL", "issue": "Every fetch('/api/...') returns 404 because ingress routes /api to FastAPI, not Node. This makes the app appear broken on preview (matches user report 'some functions or actions not working'). Locally on port 3000 everything works.", "affected_selectors": ["all"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_clinic_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "PRIMARY: Fix the ingress/port setup so REACT_APP_BACKEND_URL/api/* is served by the Node clinic server. Simplest fix: stop the FastAPI supervisor (backend on 8001) and change the Node server to listen on 8001 (or add a second listener on 8001). Since /api goes to 8001 by ingress rule, the Node app should be the one on 8001. Alternative: change ingress to send /api to 3000.",
+    "Parameterize the string-interpolated dates in /api/reports/:type.",
+    "Change medical bill numbering from COUNT(*)+1 to a per-date counter table to prevent UNIQUE bill_no collisions after deletes.",
+    "Consider retiring the unused FastAPI /app/backend/server.py entirely since this project is Node-only."
+  ],
+  "critical_code_review_comments": [
+    "server.js is 979 lines — split into routes/patients.js, routes/purchase.js, etc. for maintainability.",
+    "Repeated stock-mutation logic in purchase/medicalbill/returns should be extracted to a helper.",
+    "Callback-nested sqlite3 code has multiple 'if err' branches that can double-respond (e.g. some paths call res.json inside forEach after ROLLBACK); consider promisifying db.run/db.get and using async/await with transactions.",
+    "SQL string interpolation in /api/reports/:type is unsafe.",
+    "Bill_no generation via COUNT(*)+1 is not delete-safe."
+  ],
+  "updated_files": ["/app/backend/tests/test_clinic_api.py"],
+  "success_rate": {"backend": "100% (31/31 on localhost:3000)", "frontend": "HTML loads OK; all API calls fail via preview URL due to ingress mis-route"},
+  "seed_data_creation": "Tests create-and-cleanup TEST_ prefixed patients/doctors/medicines/purchases/bills. Existing seed (2 patients KNC001000001/002, 2 doctors, 2 medicines) preserved.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend pytest lives at /app/backend/tests/test_clinic_api.py and targets http://localhost:3000. If ingress is fixed so preview /api goes to Node port 3000 (or Node is moved to 8001), switch BASE_URL to os.environ['REACT_APP_BACKEND_URL'] and rerun. UI HTML rendering already verified on preview — the only blocker is the /api ingress routing. Do NOT waste time trying Playwright flows against preview until the routing is fixed.",
+  "rca of the issue": "User complaint 'some functions or actions not working': the frontend HTML was correctly moved to be served by Node on port 3000 (main agent's earlier fix), but the K8s ingress still routes /api/* to the FastAPI backend on port 8001 which has no clinic endpoints, so every UI action's fetch('/api/...') returns 404 with body '{\"detail\":\"Not Found\"}'. Fix: run the Node clinic server on 8001 (retire unused FastAPI) or reconfigure ingress /api → 3000."
+}
