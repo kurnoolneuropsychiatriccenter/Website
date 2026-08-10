@@ -120,6 +120,14 @@ function initDb() {
       FOREIGN KEY(patient_id) REFERENCES patients(id)
     )`);
 
+    // Additive columns for the Asha Medicals print format (safe if they already exist)
+    ['ALTER TABLE medical_bills ADD COLUMN invoice_no TEXT',
+     'ALTER TABLE medical_bills ADD COLUMN town TEXT',
+     'ALTER TABLE medical_bills ADD COLUMN referred_by_doctor_id INTEGER',
+     'ALTER TABLE medical_bills ADD COLUMN patient_name_snapshot TEXT',
+     'ALTER TABLE medical_bills ADD COLUMN patient_phone_snapshot TEXT'
+    ].forEach(sql => db.run(sql, () => {}));
+
     // Medical Bill Items
     db.run(`CREATE TABLE IF NOT EXISTS medical_bill_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,6 +141,14 @@ function initDb() {
       FOREIGN KEY(medical_bill_id) REFERENCES medical_bills(id) ON DELETE CASCADE,
       FOREIGN KEY(medicine_id) REFERENCES medicines(id)
     )`);
+
+    ['ALTER TABLE medical_bill_items ADD COLUMN hsn TEXT',
+     'ALTER TABLE medical_bill_items ADD COLUMN mrp REAL',
+     'ALTER TABLE medical_bill_items ADD COLUMN sgst_percent REAL DEFAULT 0',
+     'ALTER TABLE medical_bill_items ADD COLUMN cgst_percent REAL DEFAULT 0',
+     'ALTER TABLE medical_bill_items ADD COLUMN sgst_amount REAL DEFAULT 0',
+     'ALTER TABLE medical_bill_items ADD COLUMN cgst_amount REAL DEFAULT 0'
+    ].forEach(sql => db.run(sql, () => {}));
 
     // Medicine Returns
     db.run(`CREATE TABLE IF NOT EXISTS medicine_returns (
@@ -633,12 +649,12 @@ app.delete('/api/purchase/:id', (req, res) => {
 // MEDICAL BILLING API & STOCK DECREMENT
 // -----------------------------------------------------------------------
 app.post('/api/medicalbill/save', (req, res) => {
-  const { bill_date, patient_id, discount_percent, items } = req.body;
+  const { bill_date, patient_id, discount_percent, discount_amount: discountAmtInput,
+          invoice_no, town, referred_by_doctor_id, items } = req.body;
   if (!items || items.length === 0) return res.status(400).json({ success: false, message: 'No items in medical bill' });
   if (!patient_id) return res.status(400).json({ success: false, message: 'Patient Code / ID is required' });
 
   // Verify stock for all items first
-  let subtotal = 0;
   let itemsProcessed = 0;
   let stockError = null;
 
@@ -656,47 +672,68 @@ app.post('/api/medicalbill/save', (req, res) => {
           return res.status(400).json({ success: false, message: stockError });
         }
 
-        // Proceed with saving bill and decrementing stock
         const dateStr = bill_date || getTodayDate();
-        
-        // Generate Bill No using max id (delete-safe)
-        db.get(`SELECT MAX(id) as max_id FROM medical_bills`, (err, row) => {
-          const billNoNum = ((row && row.max_id) ? row.max_id : 0) + 1;
-          const bill_no = `MED-${dateStr.replace(/-/g, '')}-${String(billNoNum).padStart(4, '0')}`;
 
-          items.forEach(i => {
-            subtotal += (i.qty * i.rate);
-          });
+        // Get patient snapshot (name + phone) so bill still prints correctly if patient is edited later
+        db.get(`SELECT patient_name, mobile FROM patients WHERE id = ?`, [patient_id], (err, patientRow) => {
+          const patient_name_snapshot = patientRow ? patientRow.patient_name : '';
+          const patient_phone_snapshot = patientRow ? patientRow.mobile : '';
 
-          const discPct = discount_percent ? parseFloat(discount_percent) : 0;
-          const discount_amount = (subtotal * discPct) / 100;
-          const grand_total = subtotal - discount_amount;
+          // Generate Bill No using max id (delete-safe)
+          db.get(`SELECT MAX(id) as max_id FROM medical_bills`, (err, row) => {
+            const billNoNum = ((row && row.max_id) ? row.max_id : 0) + 1;
+            const bill_no = `MED-${dateStr.replace(/-/g, '')}-${String(billNoNum).padStart(4, '0')}`;
+            const finalInvoiceNo = invoice_no || `INV${String(1000 + billNoNum)}`;
 
-          db.serialize(() => {
-            db.run(`BEGIN TRANSACTION`);
-            let hasError = false;
+            // Compute per-item amount (rate + SGST + CGST) and subtotal
+            let subtotal = 0;
+            items.forEach(i => {
+              const q = parseFloat(i.qty) || 0;
+              const r = parseFloat(i.rate) || 0;
+              const sp = parseFloat(i.sgst_percent) || 0;
+              const cp = parseFloat(i.cgst_percent) || 0;
+              const base = q * r;
+              const sgst_amount = +(base * sp / 100).toFixed(2);
+              const cgst_amount = +(base * cp / 100).toFixed(2);
+              const amt = +(base + sgst_amount + cgst_amount).toFixed(2);
+              i._computed = { sgst_amount, cgst_amount, amount: amt };
+              subtotal += amt;
+            });
+            subtotal = +subtotal.toFixed(2);
+
+            const discPct = discount_percent ? parseFloat(discount_percent) : 0;
+            // Allow either % or fixed rupee discount from client
+            const discAmt = discountAmtInput != null && discountAmtInput !== ''
+              ? parseFloat(discountAmtInput)
+              : +((subtotal * discPct) / 100).toFixed(2);
+            const grand_total = +(subtotal - discAmt).toFixed(2);
 
             db.run(
-              `INSERT INTO medical_bills (bill_no, bill_date, patient_id, subtotal, discount_percent, discount_amount, grand_total) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-              [bill_no, dateStr, patient_id, subtotal, discPct, discount_amount, grand_total],
+              `INSERT INTO medical_bills (bill_no, bill_date, patient_id, subtotal, discount_percent, discount_amount, grand_total,
+                                          invoice_no, town, referred_by_doctor_id, patient_name_snapshot, patient_phone_snapshot)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [bill_no, dateStr, patient_id, subtotal, discPct, discAmt, grand_total,
+               finalInvoiceNo, town || '', referred_by_doctor_id || null,
+               patient_name_snapshot, patient_phone_snapshot],
               function(err) {
-                if (err) {
-                  hasError = true;
-                  db.run(`ROLLBACK`);
-                  return res.status(500).json({ success: false, message: err.message });
-                }
+                if (err) return res.status(500).json({ success: false, message: err.message });
 
                 const medical_bill_id = this.lastID;
                 let savedItems = 0;
+                let hasError = false;
 
                 items.forEach(i => {
-                  const amt = i.qty * i.rate;
+                  const { sgst_amount, cgst_amount, amount } = i._computed;
                   db.run(
-                    `INSERT INTO medical_bill_items (medical_bill_id, medicine_id, batch, expiry, qty, rate, amount) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                    [medical_bill_id, i.medicine_id, i.batch || '', i.expiry || '', i.qty, i.rate, amt],
-                    (err) => {
-                      if (err) hasError = true;
-                    }
+                    `INSERT INTO medical_bill_items
+                       (medical_bill_id, medicine_id, batch, expiry, qty, rate, amount, hsn, mrp, sgst_percent, cgst_percent, sgst_amount, cgst_amount)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [medical_bill_id, i.medicine_id, i.batch || '', i.expiry || '',
+                     i.qty, i.rate, amount,
+                     i.hsn || '', parseFloat(i.mrp) || 0,
+                     parseFloat(i.sgst_percent) || 0, parseFloat(i.cgst_percent) || 0,
+                     sgst_amount, cgst_amount],
+                    (err) => { if (err) hasError = true; }
                   );
 
                   db.run(
@@ -707,11 +744,9 @@ app.post('/api/medicalbill/save', (req, res) => {
                       savedItems++;
                       if (savedItems === items.length) {
                         if (hasError) {
-                          db.run(`ROLLBACK`);
                           res.status(500).json({ success: false, message: 'Error saving medical bill' });
                         } else {
-                          db.run(`COMMIT`);
-                          res.json({ success: true, data: { medical_bill_id, bill_no, grand_total } });
+                          res.json({ success: true, data: { medical_bill_id, bill_no, invoice_no: finalInvoiceNo, grand_total } });
                         }
                       }
                     }
@@ -760,9 +795,11 @@ app.get('/api/medicalbill/history', (req, res) => {
 app.get('/api/medicalbill/print/:id', (req, res) => {
   const { id } = req.params;
   const query = `
-    SELECT mb.*, p.patient_code, p.patient_name, p.age, p.gender, p.mobile, p.address
+    SELECT mb.*, p.patient_code, p.patient_name, p.age, p.gender, p.mobile, p.address,
+           d.doctor_name as referred_by_name, d.qualification as referred_by_qual
     FROM medical_bills mb
     JOIN patients p ON mb.patient_id = p.id
+    LEFT JOIN doctors d ON mb.referred_by_doctor_id = d.id
     WHERE mb.id = ?
   `;
   db.get(query, [id], (err, bill) => {

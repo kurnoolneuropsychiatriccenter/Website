@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Medical Billing - Kurnool Neuro Psychiatric and ENT Center</title>
+  <title>Medical Billing - Asha Medicals</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="bg-gray-50 text-gray-800">
-  <header class="bg-blue-900 text-white shadow-md">
+  <header class="bg-blue-900 text-white shadow-md no-print">
     <div class="container mx-auto px-4 py-4 flex justify-between items-center">
       <div class="flex items-center space-x-3">
         <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
-        <h1 class="text-xl font-bold">Medical Billing & Pharmacy Sale</h1>
+        <h1 class="text-xl font-bold">Medical Billing (Asha Medicals)</h1>
       </div>
       <div class="space-x-3">
         <a href="medicalbillhistory.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-history mr-1"></i> Bill History</a>
@@ -23,75 +23,120 @@
 
   <div class="container mx-auto px-4 py-6">
     <form id="medicalBillForm" onsubmit="saveMedicalBill(event)">
-      <!-- Patient & Bill Details -->
-      <div class="bg-white p-6 rounded-lg shadow mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div>
-          <label class="block text-sm font-medium mb-1">Bill Date *</label>
-          <input type="date" id="billDate" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="bill-date-input">
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Patient Code *</label>
-          <div class="flex">
-            <input type="text" id="patientCode" required placeholder="e.g. KNC001000001" class="w-full border px-3 py-2 rounded-l text-sm focus:outline-blue-500 uppercase" onblur="fetchPatientByCode()" data-testid="patient-code-input">
-            <button type="button" onclick="fetchPatientByCode()" class="bg-blue-600 text-white px-3 rounded-r text-sm" data-testid="fetch-patient-btn"><i class="fa fa-search"></i></button>
+
+      <!-- Header Card (Asha Medicals) -->
+      <div class="bg-white p-6 rounded-lg shadow mb-6 text-center border-b-2 border-gray-800">
+        <h1 class="text-3xl font-extrabold tracking-wide text-gray-900">ASHA MEDICALS</h1>
+        <p class="text-xs text-gray-600 mt-1 max-w-3xl mx-auto">
+          Shop no: 14, J.C.S. Complex, opposite New RTC busstand, beside GOPI HOTEL Spenser's Value Mart, lane, Sita Rama Nagar, Kurnool, Andhra Pradesh 518003
+        </p>
+        <p class="text-xs text-gray-700 mt-1">phone no : 91 91547 94360</p>
+      </div>
+
+      <!-- Patient & Bill Meta -->
+      <div class="bg-white p-6 rounded-lg shadow mb-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Left column -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Patient Code *</label>
+            <div class="flex">
+              <input type="text" id="patientCode" required placeholder="e.g. KNC001000001" class="w-full border px-3 py-2 rounded-l text-sm uppercase focus:outline-blue-500" onblur="fetchPatientByCode()" data-testid="patient-code-input">
+              <button type="button" onclick="fetchPatientByCode()" class="bg-blue-600 text-white px-3 rounded-r text-sm" data-testid="fetch-patient-btn"><i class="fa fa-search"></i></button>
+            </div>
+            <input type="hidden" id="patientId">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Patient Name</label>
+            <input type="text" id="patientName" readonly class="w-full border bg-gray-100 px-3 py-2 rounded text-sm font-medium" data-testid="patient-name-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Phone</label>
+            <input type="text" id="patientPhone" readonly class="w-full border bg-gray-100 px-3 py-2 rounded text-sm" data-testid="patient-phone-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Referred By</label>
+            <select id="referredBy" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="referred-by-select">
+              <option value="">-- Select Doctor --</option>
+            </select>
           </div>
         </div>
-        <div class="md:col-span-2">
-          <label class="block text-sm font-medium mb-1">Patient Details (Auto-loaded)</label>
-          <input type="text" id="patientDetailsDisplay" readonly placeholder="Patient Name, Age, Gender, Mobile will appear here" class="w-full border bg-gray-100 px-3 py-2 rounded text-sm text-gray-700 font-medium" data-testid="patient-details-display">
-          <input type="hidden" id="patientId">
+
+        <!-- Right column -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Date *</label>
+            <input type="date" id="billDate" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="bill-date-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Town</label>
+            <input type="text" id="town" placeholder="e.g. Kurnool" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="town-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Invoice No</label>
+            <input type="text" id="invoiceNo" placeholder="Auto (e.g. INV1000)" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="invoice-no-input">
+            <p class="text-xs text-gray-500 mt-1">Leave blank to auto-generate.</p>
+          </div>
         </div>
       </div>
 
       <!-- Medicines Table -->
       <div class="bg-white p-6 rounded-lg shadow mb-6">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-lg font-bold text-gray-800">Prescribed Medicines</h2>
+          <h2 class="text-lg font-bold text-gray-800">Medicine Items</h2>
           <button type="button" onclick="addBillRow()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700" data-testid="add-more-med-btn">
             <i class="fa fa-plus mr-1"></i> Add More Medicine
           </button>
         </div>
 
         <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse" data-testid="medical-bill-items-table">
+          <table class="w-full text-left border-collapse text-xs" data-testid="medical-bill-items-table">
             <thead>
-              <tr class="bg-blue-50 text-blue-900 border-b text-xs">
-                <th class="p-2">Medicine (Available Stock)</th>
+              <tr class="bg-blue-50 text-blue-900 border-b">
+                <th class="p-2 w-10">S.No</th>
+                <th class="p-2">Product</th>
                 <th class="p-2">Batch</th>
-                <th class="p-2">Expiry</th>
-                <th class="p-2">Available</th>
-                <th class="p-2">Qty</th>
-                <th class="p-2">MRP (₹)</th>
-                <th class="p-2">Amount (₹)</th>
-                <th class="p-2 text-center">Action</th>
+                <th class="p-2">Exp</th>
+                <th class="p-2">HSN</th>
+                <th class="p-2">MRP</th>
+                <th class="p-2">Qty <span class="text-gray-500">(stock)</span></th>
+                <th class="p-2">Rate</th>
+                <th class="p-2">SGST %</th>
+                <th class="p-2">CGST %</th>
+                <th class="p-2">Amount</th>
+                <th class="p-2 text-center w-8"></th>
               </tr>
             </thead>
-            <tbody id="billRowsBody" class="divide-y text-sm">
-              <!-- Rows added dynamically -->
+            <tbody id="billRowsBody" class="divide-y">
             </tbody>
           </table>
         </div>
 
-        <!-- Calculation & Discount Section -->
+        <!-- Totals -->
         <div class="mt-6 border-t pt-4 flex flex-col md:flex-row justify-between items-end">
           <div class="w-full md:w-1/3 mb-4 md:mb-0 space-y-3">
             <div>
-              <label class="block text-sm font-medium mb-1">Discount (%)</label>
-              <input type="number" id="discountPercent" min="0" max="100" value="0" step="0.5" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" oninput="calculateTotals()" data-testid="discount-percent-input">
+              <label class="block text-sm font-medium mb-1">Discount</label>
+              <div class="flex items-center gap-2">
+                <input type="number" id="discountPercent" min="0" max="100" value="0" step="0.5" class="w-24 border px-3 py-2 rounded text-sm focus:outline-blue-500" oninput="onDiscountPercentChange()" data-testid="discount-percent-input">
+                <span class="text-sm text-gray-600">%</span>
+                <span class="text-xs text-gray-500">OR</span>
+                <input type="number" id="discountAmount" min="0" value="0" step="0.01" class="w-28 border px-3 py-2 rounded text-sm focus:outline-blue-500" oninput="onDiscountAmountChange()" data-testid="discount-amount-input">
+                <span class="text-sm text-gray-600">₹</span>
+              </div>
             </div>
           </div>
           <div class="w-full md:w-1/3 text-right space-y-2 bg-gray-50 p-4 rounded-lg border">
             <div class="flex justify-between text-sm">
-              <span class="text-gray-600">Subtotal:</span>
-              <span id="subtotalDisplay" class="font-bold text-gray-800" data-testid="subtotal-display">₹0.00</span>
+              <span class="text-gray-600">Sub Total:</span>
+              <span id="subtotalDisplay" class="font-bold text-gray-800" data-testid="subtotal-display">0.00</span>
             </div>
             <div class="flex justify-between text-sm">
-              <span class="text-gray-600">Discount Amount:</span>
-              <span id="discountAmountDisplay" class="font-bold text-red-600" data-testid="discount-amount-display">-₹0.00</span>
+              <span class="text-gray-600">Discount:</span>
+              <span id="discountAmountDisplay" class="font-bold text-red-600" data-testid="discount-amount-display">0.00</span>
             </div>
             <div class="flex justify-between text-lg border-t pt-2">
               <span class="font-bold text-gray-800">Grand Total:</span>
-              <span id="grandTotalDisplay" class="font-bold text-blue-600 text-2xl" data-testid="grand-total-display">₹0.00</span>
+              <span id="grandTotalDisplay" class="font-bold text-blue-700 text-2xl" data-testid="grand-total-display">0.00</span>
             </div>
           </div>
         </div>
@@ -99,7 +144,7 @@
 
       <div class="flex justify-end">
         <button type="submit" class="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700 shadow-lg text-lg" data-testid="save-medical-bill-btn">
-          <i class="fa fa-file-invoice-dollar mr-2"></i> Save Medical Bill & Print
+          <i class="fa fa-file-invoice-dollar mr-2"></i> Save Bill & Print
         </button>
       </div>
     </form>
@@ -107,18 +152,30 @@
 
   <script>
     let allMedicines = [];
+    let allDoctors = [];
+    let discountMode = 'percent'; // 'percent' or 'amount'
 
     async function initMedicalBill() {
       document.getElementById('billDate').value = new Date().toISOString().split('T')[0];
       try {
-        const res = await fetch('/api/medicines');
-        const json = await res.json();
-        if (json.success) {
-          allMedicines = json.data;
-          addBillRow();
+        const [medRes, docRes] = await Promise.all([
+          fetch('/api/medicines').then(r => r.json()),
+          fetch('/api/doctors').then(r => r.json())
+        ]);
+        if (medRes.success) allMedicines = medRes.data;
+        if (docRes.success) {
+          allDoctors = docRes.data;
+          const sel = document.getElementById('referredBy');
+          allDoctors.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.id;
+            opt.innerText = `${d.doctor_name}${d.qualification ? ' (' + d.qualification + ')' : ''}`;
+            sel.appendChild(opt);
+          });
         }
+        addBillRow();
       } catch (err) {
-        console.error('Error fetching medicines', err);
+        console.error('Error initializing medical bill', err);
       }
     }
 
@@ -131,12 +188,17 @@
         if (json.success && json.data) {
           const p = json.data;
           document.getElementById('patientId').value = p.id;
-          document.getElementById('patientDetailsDisplay').value = `${p.patient_name} | Age: ${p.age || '-'} | Gender: ${p.gender || '-'} | Mobile: ${p.mobile || '-'}`;
+          document.getElementById('patientName').value = p.patient_name || '';
+          document.getElementById('patientPhone').value = p.mobile || '';
+          if (!document.getElementById('town').value) {
+            document.getElementById('town').value = p.address || '';
+          }
         } else {
           alert('Patient not found with code: ' + code);
           document.getElementById('patientCode').value = '';
           document.getElementById('patientId').value = '';
-          document.getElementById('patientDetailsDisplay').value = '';
+          document.getElementById('patientName').value = '';
+          document.getElementById('patientPhone').value = '';
         }
       } catch (err) {
         console.error('Error fetching patient', err);
@@ -145,93 +207,116 @@
 
     function addBillRow() {
       const tbody = document.getElementById('billRowsBody');
-      const rowId = Date.now() + Math.random();
+      const rowId = 'r' + Date.now() + Math.floor(Math.random() * 1000);
       const tr = document.createElement('tr');
-      tr.id = `bill-row-${rowId}`;
+      tr.id = rowId;
 
       let medOptions = '<option value="">Select Medicine</option>';
       allMedicines.forEach(m => {
-        medOptions += `<option value="${m.id}" data-mrp="${m.mrp || 0}" data-stock="${m.current_stock || 0}" data-batch="${m.batch_number || ''}" data-expiry="${m.expiry_date || ''}">${m.medicine_name} [Stock: ${m.current_stock}, MRP: ₹${m.mrp}]</option>`;
+        medOptions += `<option value="${m.id}"
+          data-mrp="${m.mrp || 0}"
+          data-rate="${m.rate || m.mrp || 0}"
+          data-stock="${m.current_stock || 0}"
+          data-batch="${m.batch_number || ''}"
+          data-expiry="${m.expiry_date || ''}"
+          data-hsn="${m.hsn_number || ''}"
+          data-name="${(m.medicine_name || '').replace(/"/g, '&quot;')}">${m.medicine_name} [Stock:${m.current_stock}]</option>`;
       });
 
       tr.innerHTML = `
+        <td class="p-2 sno-cell font-semibold text-gray-700">1</td>
         <td class="p-2">
-          <select class="border px-2 py-1 rounded text-sm w-64 med-select focus:outline-blue-500" onchange="onBillMedicineChange('${rowId}')" required data-testid="bill-med-select">
+          <select class="border px-2 py-1 rounded text-xs w-40 med-select focus:outline-blue-500" onchange="onBillMedicineChange('${rowId}')" required data-testid="bill-med-select">
             ${medOptions}
           </select>
         </td>
-        <td class="p-2 batch-display text-gray-700">-</td>
-        <td class="p-2 expiry-display text-gray-700">-</td>
-        <td class="p-2 stock-display font-semibold text-blue-600">0</td>
+        <td class="p-2"><input type="text" class="border px-2 py-1 rounded text-xs w-20 batch-input" data-testid="bill-batch-input"></td>
+        <td class="p-2"><input type="text" class="border px-2 py-1 rounded text-xs w-20 expiry-input" placeholder="MM/YY" data-testid="bill-expiry-input"></td>
+        <td class="p-2"><input type="text" class="border px-2 py-1 rounded text-xs w-16 hsn-input" data-testid="bill-hsn-input"></td>
+        <td class="p-2"><input type="number" step="0.01" min="0" value="0" class="border px-2 py-1 rounded text-xs w-16 mrp-input" data-testid="bill-mrp-input"></td>
         <td class="p-2">
-          <input type="number" min="1" value="1" class="border px-2 py-1 rounded text-sm w-20 qty-input" oninput="validateAndCalculate('${rowId}')" required data-testid="bill-qty-input">
+          <input type="number" min="1" value="1" class="border px-2 py-1 rounded text-xs w-14 qty-input" oninput="validateAndCalculate('${rowId}')" required data-testid="bill-qty-input">
+          <div class="text-[10px] text-gray-500 stock-display">stock: 0</div>
         </td>
-        <td class="p-2">
-          <input type="number" step="0.01" min="0" value="0" class="border px-2 py-1 rounded text-sm w-24 mrp-input" oninput="calculateTotals()" required data-testid="bill-mrp-input">
-        </td>
-        <td class="p-2 font-semibold text-gray-700 amount-display">₹0.00</td>
+        <td class="p-2"><input type="number" step="0.01" min="0" value="0" class="border px-2 py-1 rounded text-xs w-16 rate-input" oninput="validateAndCalculate('${rowId}')" required data-testid="bill-rate-input"></td>
+        <td class="p-2"><input type="number" step="0.01" min="0" value="2.5" class="border px-2 py-1 rounded text-xs w-14 sgst-input" oninput="validateAndCalculate('${rowId}')" data-testid="bill-sgst-input"></td>
+        <td class="p-2"><input type="number" step="0.01" min="0" value="2.5" class="border px-2 py-1 rounded text-xs w-14 cgst-input" oninput="validateAndCalculate('${rowId}')" data-testid="bill-cgst-input"></td>
+        <td class="p-2 font-semibold text-gray-700 amount-display text-right">0.00</td>
         <td class="p-2 text-center">
           <button type="button" onclick="removeBillRow('${rowId}')" class="text-red-600 hover:text-red-800" data-testid="bill-remove-btn"><i class="fa fa-trash"></i></button>
         </td>
       `;
       tbody.appendChild(tr);
+      renumberRows();
+    }
+
+    function renumberRows() {
+      document.querySelectorAll('#billRowsBody tr').forEach((tr, idx) => {
+        const c = tr.querySelector('.sno-cell');
+        if (c) c.innerText = (idx + 1);
+      });
     }
 
     function onBillMedicineChange(rowId) {
-      const tr = document.getElementById(`bill-row-${rowId}`);
-      const select = tr.querySelector('.med-select');
-      const opt = select.options[select.selectedIndex];
+      const tr = document.getElementById(rowId);
+      const opt = tr.querySelector('.med-select').options[tr.querySelector('.med-select').selectedIndex];
       if (opt && opt.value) {
-        const mrp = opt.getAttribute('data-mrp') || 0;
+        tr.querySelector('.mrp-input').value = opt.getAttribute('data-mrp') || 0;
+        tr.querySelector('.rate-input').value = opt.getAttribute('data-rate') || opt.getAttribute('data-mrp') || 0;
+        tr.querySelector('.hsn-input').value = opt.getAttribute('data-hsn') || '';
+        tr.querySelector('.batch-input').value = opt.getAttribute('data-batch') || '';
+        tr.querySelector('.expiry-input').value = opt.getAttribute('data-expiry') || '';
         const stock = parseFloat(opt.getAttribute('data-stock')) || 0;
-        const batch = opt.getAttribute('data-batch') || '';
-        const expiry = opt.getAttribute('data-expiry') || '';
-
-        tr.querySelector('.mrp-input').value = mrp;
-        tr.querySelector('.batch-display').innerText = batch;
-        tr.querySelector('.expiry-display').innerText = expiry;
-        tr.querySelector('.stock-display').innerText = stock;
-        
+        tr.querySelector('.stock-display').innerText = 'stock: ' + stock;
         validateAndCalculate(rowId);
       }
     }
 
     function validateAndCalculate(rowId) {
-      const tr = document.getElementById(`bill-row-${rowId}`);
-      const select = tr.querySelector('.med-select');
-      const opt = select.options[select.selectedIndex];
-      const stock = opt && opt.value ? parseFloat(opt.getAttribute('data-stock')) || 0 : 0;
+      const tr = document.getElementById(rowId);
+      const opt = tr.querySelector('.med-select').options[tr.querySelector('.med-select').selectedIndex];
+      const stock = opt && opt.value ? parseFloat(opt.getAttribute('data-stock')) || 0 : Infinity;
       const qtyInput = tr.querySelector('.qty-input');
-      const qty = parseFloat(qtyInput.value) || 0;
-
+      let qty = parseFloat(qtyInput.value) || 0;
       if (qty > stock) {
         alert(`Insufficient Stock! Available stock is only ${stock}.`);
         qtyInput.value = stock;
+        qty = stock;
       }
-
-      const finalQty = parseFloat(qtyInput.value) || 0;
-      const mrp = parseFloat(tr.querySelector('.mrp-input').value) || 0;
-      const amount = finalQty * mrp;
-      tr.querySelector('.amount-display').innerText = '₹' + amount.toFixed(2);
+      const rate = parseFloat(tr.querySelector('.rate-input').value) || 0;
+      const sgst = parseFloat(tr.querySelector('.sgst-input').value) || 0;
+      const cgst = parseFloat(tr.querySelector('.cgst-input').value) || 0;
+      const base = qty * rate;
+      const amount = +(base + (base * sgst / 100) + (base * cgst / 100)).toFixed(2);
+      tr.querySelector('.amount-display').innerText = amount.toFixed(2);
       calculateTotals();
     }
 
     function calculateTotals() {
       let subtotal = 0;
       document.querySelectorAll('#billRowsBody tr').forEach(tr => {
-        const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
-        const mrp = parseFloat(tr.querySelector('.mrp-input').value) || 0;
-        subtotal += (qty * mrp);
+        subtotal += parseFloat(tr.querySelector('.amount-display').innerText) || 0;
       });
+      subtotal = +subtotal.toFixed(2);
+      document.getElementById('subtotalDisplay').innerText = subtotal.toFixed(2);
 
-      const discPct = parseFloat(document.getElementById('discountPercent').value) || 0;
-      const discountAmount = (subtotal * discPct) / 100;
-      const grandTotal = subtotal - discountAmount;
+      let discAmt = 0;
+      if (discountMode === 'percent') {
+        const p = parseFloat(document.getElementById('discountPercent').value) || 0;
+        discAmt = +(subtotal * p / 100).toFixed(2);
+        document.getElementById('discountAmount').value = discAmt.toFixed(2);
+      } else {
+        discAmt = parseFloat(document.getElementById('discountAmount').value) || 0;
+        const p = subtotal > 0 ? +((discAmt / subtotal) * 100).toFixed(2) : 0;
+        document.getElementById('discountPercent').value = p;
+      }
 
-      document.getElementById('subtotalDisplay').innerText = '₹' + subtotal.toFixed(2);
-      document.getElementById('discountAmountDisplay').innerText = '-₹' + discountAmount.toFixed(2);
-      document.getElementById('grandTotalDisplay').innerText = '₹' + grandTotal.toFixed(2);
+      document.getElementById('discountAmountDisplay').innerText = discAmt.toFixed(2);
+      document.getElementById('grandTotalDisplay').innerText = (subtotal - discAmt).toFixed(2);
     }
+
+    function onDiscountPercentChange() { discountMode = 'percent'; calculateTotals(); }
+    function onDiscountAmountChange()  { discountMode = 'amount';  calculateTotals(); }
 
     function removeBillRow(rowId) {
       const tbody = document.getElementById('billRowsBody');
@@ -239,46 +324,52 @@
         alert('At least one medicine row is required.');
         return;
       }
-      document.getElementById(`bill-row-${rowId}`).remove();
+      document.getElementById(rowId).remove();
+      renumberRows();
       calculateTotals();
     }
 
     async function saveMedicalBill(e) {
       e.preventDefault();
       const patient_id = document.getElementById('patientId').value;
-      const bill_date = document.getElementById('billDate').value;
-      const discount_percent = parseFloat(document.getElementById('discountPercent').value) || 0;
-
       if (!patient_id) {
         alert('Please enter a valid Patient Code and load patient details.');
         return;
       }
 
+      const bill_date = document.getElementById('billDate').value;
+      const invoice_no = document.getElementById('invoiceNo').value.trim();
+      const town = document.getElementById('town').value.trim();
+      const referred_by_doctor_id = document.getElementById('referredBy').value || null;
+      const discount_percent = parseFloat(document.getElementById('discountPercent').value) || 0;
+      const discount_amount = parseFloat(document.getElementById('discountAmount').value) || 0;
+
       const items = [];
       let valid = true;
-
       document.querySelectorAll('#billRowsBody tr').forEach(tr => {
         const medicine_id = tr.querySelector('.med-select').value;
-        const select = tr.querySelector('.med-select');
-        const opt = select.options[select.selectedIndex];
-        const batch = opt ? opt.getAttribute('data-batch') : '';
-        const expiry = opt ? opt.getAttribute('data-expiry') : '';
         const qty = parseFloat(tr.querySelector('.qty-input').value);
-        const rate = parseFloat(tr.querySelector('.mrp-input').value);
-
-        if (!medicine_id || isNaN(qty) || isNaN(rate)) {
-          valid = false;
-        } else {
-          items.push({ medicine_id, batch, expiry, qty, rate });
-        }
+        const rate = parseFloat(tr.querySelector('.rate-input').value);
+        if (!medicine_id || isNaN(qty) || qty <= 0 || isNaN(rate)) { valid = false; return; }
+        items.push({
+          medicine_id,
+          batch: tr.querySelector('.batch-input').value,
+          expiry: tr.querySelector('.expiry-input').value,
+          hsn: tr.querySelector('.hsn-input').value,
+          mrp: parseFloat(tr.querySelector('.mrp-input').value) || 0,
+          qty, rate,
+          sgst_percent: parseFloat(tr.querySelector('.sgst-input').value) || 0,
+          cgst_percent: parseFloat(tr.querySelector('.cgst-input').value) || 0,
+        });
       });
 
       if (!valid || items.length === 0) {
-        alert('Please complete all medicine item details in the bill.');
+        alert('Please complete every row (Medicine, Qty and Rate are required).');
         return;
       }
 
-      const payload = { bill_date, patient_id, discount_percent, items };
+      const payload = { bill_date, patient_id, invoice_no, town, referred_by_doctor_id,
+                        discount_percent, discount_amount, items };
 
       try {
         const res = await fetch('/api/medicalbill/save', {
@@ -288,13 +379,13 @@
         });
         const json = await res.json();
         if (json.success) {
-          alert('Medical Bill saved successfully and stock decreased!');
-          window.location.href = `medicalbillhistory.html`;
+          window.location.href = `medicalbillprint.html?id=${json.data.medical_bill_id}`;
         } else {
           alert(json.message);
         }
       } catch (err) {
         console.error('Error saving medical bill', err);
+        alert('Could not save the bill. Please try again.');
       }
     }
 

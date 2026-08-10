@@ -32,20 +32,23 @@ Build a working full-stack Clinic Management System for **Kurnool Neuro Psychiat
 - OP History with Today filter, Print, Delete. OP Print page.
 - Purchase multi-item form (single "Add More Medicine" button), stock increment on save.
 - Purchase History with Today filter, Delete-reverses-stock.
-- Medical Billing multi-item form with patient autofill, batch/expiry/MRP autofill, over-sell blocked, discount %, Save decreases stock.
-- Medical Bill History with Patient Code visible, Print, Delete-restores-stock.
-- Medical Bill Print page ("Asha Medical" header).
+- **Medical Billing (Asha Medicals format)**: two-column patient/bill meta (Patient Code → auto Name+Phone, Referred By doctor dropdown, Date, Town, Invoice No). Item columns: S.No, Product, Batch, Exp, HSN, MRP, Qty (with stock), Rate, SGST %, CGST %, Amount. Per-item Amount = qty·rate + SGST + CGST. Discount can be entered as % OR ₹ (auto-synced). Over-sell blocked.
+- **Medical Bill Print** exactly matches the Asha Medicals reference (header, address, phone 91 91547 94360, meta grid, item columns, Sub Total / Discount / Grand Total, footer "Goods once sold cannot be returned." + Signature). `.no-print` hides buttons on print.
+- Medical Bill History with Patient Code visible, Print (Asha Medicals layout), Delete-restores-stock.
 - Medicine Return module with stock decrement + history table.
 - Reports page with 10 report types + Today / date-range filters.
 - Dashboard summary API aggregating today's counts + total patients + low stock + expiring.
 - Backend transactional stock changes; delete endpoints no longer race-condition prone.
 - `bill_no` uses `MAX(id)+1` (delete-safe). Reports SQL parameterized.
+- Idempotent `ALTER TABLE ADD COLUMN` migration for the new Asha Medicals fields.
 - FastAPI proxy `/app/backend/server.py` routes `/api/*` from ingress to Node on 3000.
 
 ## Testing
-- `/app/backend/tests/test_clinic_api.py` — 31 backend tests, all pass through preview URL.
-- Playwright UI smoke of dashboard, patients, medicines, purchase, medical bill, OP booking — all pass.
-- Report: `/app/test_reports/iteration_2.json` (0 critical, 0 major, only minor CDN-Tailwind warning).
+- `/app/backend/tests/test_clinic_api.py` — 31 core backend tests.
+- `/app/backend/tests/test_asha_medicals.py` — 8 tests for the new Asha Medicals bill format (fields saved, reference math 47.25 + 115.50 = 162.75, rupee & % discount, oversell block, delete-restores-stock).
+- Total: **39/39 pytest pass** via preview URL.
+- Playwright UI smoke: dashboard, patients, medicines, purchase, medical billing (new format), OP booking — all pass.
+- Latest report: `/app/test_reports/iteration_3.json` (0 critical, 0 major).
 
 ## Local Laptop Setup (Windows/macOS/Linux)
 1. Install Node.js 18+ from https://nodejs.org.

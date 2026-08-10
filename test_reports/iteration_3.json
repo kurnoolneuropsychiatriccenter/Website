@@ -1,0 +1,41 @@
+{
+  "summary": "Asha Medicals medical-bill format changes tested end-to-end (backend + frontend) against preview URL. Added new pytest file test_asha_medicals.py (8 tests) covering the new POST/GET fields, reference math (items 47.25/47.26 + 115.50 = subtotal 162.75/162.76), fixed-rupee discount, oversell blocking (400, no bill row created), idempotent ALTER TABLE (medicines endpoint still healthy), and DELETE restoring stock. All 39/39 pytest tests pass (31 pre-existing + 8 new). Playwright UI verified: medicalbill.html loads, doctor dropdown populated from /api/doctors, KNC001000001 auto-fills patient name+phone on blur, medicine selection auto-fills batch/exp/HSN/MRP/Rate + stock display, SGST%/CGST% default to 2.5, qty=1 rate=10 → amount 10.50 live, discount % 10 syncs to ₹1.05 (10% of 10.50), qty > stock triggers 'Insufficient Stock! Available stock is only 147.' alert and clamps qty. Save Bill navigates to medicalbillprint.html?id=X. Print page renders EXACTLY per spec: header 'ASHA MEDICALS' + address + phone '91 91547 94360'; two-column meta (Patient Name/Phone/Referred By | Date DD/MM/YYYY '10/08/2026' / Town / Invoice No); table headers exactly [S.No, Product, Batch, Exp, HSN, MRP, Qty, Rate, SGST, CGST, Amount]; Sub Total / Discount / Grand Total; footer 'Goods once sold cannot be returned.' + Signature; @media print .no-print { display:none } present. Medical Bill History still lists new bills with Patient Code column and Print link opens the new print layout.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All HTML pages", "issues": ["Tailwind CDN console warning 'should not be used in production' — pre-existing, non-blocking for internal clinic app but recommended to migrate to Tailwind CLI build."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_asha_medicals.py",
+    "/app/backend/tests/test_clinic_api.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/asha_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.js is now ~1015 lines — still recommend splitting into route modules (medicalbill.route.js, purchase.route.js, patients.route.js) for maintainability.",
+    "POST /api/medicalbill/save uses nested callback style with a manual counter pattern — works but is fragile; a promisified sqlite wrapper + async/await + a single serialize+transaction would be safer (partial writes possible today if a UPDATE medicines fails after INSERT medical_bills).",
+    "ALTER TABLE ADD COLUMN block is correctly wrapped in try-swallow error callback, verified idempotent (server survives restart, /api/medicines returns 200 with new tests around bill items).",
+    "medical_bill_items rounding uses toFixed(2) BEFORE summing subtotal — matches the tolerance the spec explicitly allows (47.25/47.26 both acceptable). Verified subtotal = 162.76 in our reference run.",
+    "LEFT JOIN doctors as referred_by_name works — verified in print payload."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_asha_medicals.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (39/39 pytest)",
+    "frontend": "100% on tested Asha Medicals flows (form auto-fills, live amount calc, discount % ↔ ₹ sync, oversell alert, save→print navigation, print layout matches spec)"
+  },
+  "test_credentials": "n/a — no auth in this app",
+  "seed_data_creation": "test_asha_medicals.py creates 2 TEST_ medicines (mid1/mid2) and 2 medical bills, and deletes them via cleanup fixture. All TEST_ data cleaned up on successful run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "New backend test file at /app/backend/tests/test_asha_medicals.py covers Asha Medicals format specifically; keep it alongside test_clinic_api.py. Both use BASE_URL=os.environ['REACT_APP_BACKEND_URL'] — remember to export it before pytest (frontend/.env value). Preview ingress /api → FastAPI proxy → Node on 3000 remains healthy. Medical bill history had a leftover 162.76 bill for KNC001000002 from a prior run — harmless.",
+  "rca of the issue": "n/a — no bugs found. All spec requirements for the Asha Medicals bill format are implemented and verified: new persisted fields (invoice_no, town, referred_by_doctor_id, patient_name_snapshot, patient_phone_snapshot, per-item hsn/mrp/sgst_percent/cgst_percent/sgst_amount/cgst_amount), correct math (amount = qty*rate*(1 + sgst%/100 + cgst%/100)), oversell blocked, ALTER TABLE idempotent, DELETE restores stock, UI matches the reference layout pixel-close."
+}
