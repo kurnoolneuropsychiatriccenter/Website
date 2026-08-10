@@ -82,6 +82,13 @@ function initDb() {
       FOREIGN KEY(doctor_id) REFERENCES doctors(id)
     )`);
 
+    // Additive columns for the OP Bill (Kurnool Neuro) print format
+    ['ALTER TABLE op_bills ADD COLUMN invoice_no TEXT',
+     'ALTER TABLE op_bills ADD COLUMN patient_name_snapshot TEXT',
+     'ALTER TABLE op_bills ADD COLUMN patient_phone_snapshot TEXT',
+     'ALTER TABLE op_bills ADD COLUMN patient_age_snapshot INTEGER'
+    ].forEach(sql => db.run(sql, () => {}));
+
     // Purchases Master
     db.run(`CREATE TABLE IF NOT EXISTS purchases (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -390,7 +397,7 @@ app.delete('/api/medicines/:id', (req, res) => {
 // OP BOOKING & HISTORY API
 // -----------------------------------------------------------------------
 app.post('/api/op/save', (req, res) => {
-  const { op_date, patient_id, doctor_id, consultation_fee, payment_mode, remarks } = req.body;
+  const { op_date, patient_id, doctor_id, consultation_fee, payment_mode, remarks, invoice_no } = req.body;
   const dateStr = op_date || getTodayDate();
 
   // Get token number for date
@@ -405,14 +412,30 @@ app.post('/api/op/save', (req, res) => {
 
     const op_bill_id = `OP-${dateStr.replace(/-/g, '')}-${String(token_number).padStart(3, '0')}`;
 
-    db.run(
-      `INSERT INTO op_bills (op_bill_id, op_date, token_number, patient_id, doctor_id, consultation_fee, payment_mode, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [op_bill_id, dateStr, token_number, patient_id, doctor_id, consultation_fee || 0, payment_mode || 'Cash', remarks || ''],
-      function(err) {
-        if (err) return res.status(500).json({ success: false, message: err.message });
-        res.json({ success: true, data: { id: this.lastID, op_bill_id, token_number } });
-      }
-    );
+    // Fetch patient snapshot so print stays correct even if patient is later edited
+    db.get(`SELECT patient_name, mobile, age FROM patients WHERE id = ?`, [patient_id], (err, p) => {
+      const name_snap = p ? p.patient_name : '';
+      const phone_snap = p ? (p.mobile || '') : '';
+      const age_snap = p ? p.age : null;
+
+      // Auto-generate invoice no if not supplied. Prefix INV; number = 1000 + next op_bills id
+      db.get(`SELECT MAX(id) as max_id FROM op_bills`, (e, r) => {
+        const nextId = ((r && r.max_id) ? r.max_id : 0) + 1;
+        const finalInvoiceNo = (invoice_no && invoice_no.trim()) ? invoice_no.trim() : `INV${1000 + nextId}`;
+
+        db.run(
+          `INSERT INTO op_bills (op_bill_id, op_date, token_number, patient_id, doctor_id, consultation_fee, payment_mode, remarks,
+                                 invoice_no, patient_name_snapshot, patient_phone_snapshot, patient_age_snapshot)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [op_bill_id, dateStr, token_number, patient_id, doctor_id, consultation_fee || 0, payment_mode || 'Cash', remarks || '',
+           finalInvoiceNo, name_snap, phone_snap, age_snap],
+          function(err) {
+            if (err) return res.status(500).json({ success: false, message: err.message });
+            res.json({ success: true, data: { id: this.lastID, op_bill_id, token_number, invoice_no: finalInvoiceNo } });
+          }
+        );
+      });
+    });
   });
 });
 

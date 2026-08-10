@@ -1,0 +1,35 @@
+{
+  "summary": "Verified Kurnool Neuro OP Bill format changes: backend snapshot columns + auto INV numbering + idempotent ALTER TABLE + print endpoint fields; frontend opbooking->opprint flow renders exact reference layout. 12/12 new backend tests pass, 39/39 regression tests still pass, Playwright visual check confirmed all required strings and ₹ 300.00 totals.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "opprint.html", "issues": ["Tailwind CDN emits production warning in console (cosmetic, not a bug)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_op_bill_format.py",
+    "/app/test_reports/pytest/op_bill_format.xml",
+    "/app/test_reports/pytest/regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.js is ~1040 lines and monolithic; consider splitting into route modules (patients, doctors, medicines, op, purchase, medicalbill, returns, reports) for maintainability.",
+    "OP invoice auto-generation `INV{1000 + MAX(id)+1}` is not race-safe under concurrency, though acceptable for a single-clinic app. If concurrency matters, wrap in a transaction / use a dedicated counter table like op_token_counter.",
+    "GET /api/op/print/:id INNER JOINs on patient_id; a patient row deleted after saving the bill would break the print. Snapshot fields cover the data but the JOIN still fails. Consider LEFT JOIN like the medical bill print endpoint already does."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_op_bill_format.py (new)"
+  ],
+  "success_rate": {"backend": "100% (51/51)", "frontend": "100%"},
+  "test_credentials": "N/A (no auth)",
+  "seed_data_creation": "Test creates+deletes patient 'arif' age 23; leaves DB clean.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Node server runs as child of `yarn start` (frontend supervisor). Restart via `pkill -f 'node /app/server.js'` and supervisor autoresumes. pytest.ini has -n auto/loadscope; run with `-o addopts=''` to disable xdist for module-scoped fixtures. REACT_APP_BACKEND_URL must be exported in shell before pytest.",
+  "rca of the issue": "N/A - all functionality verified working."
+}

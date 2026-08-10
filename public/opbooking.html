@@ -69,9 +69,15 @@
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Remarks</label>
-            <input type="text" id="remarks" placeholder="Optional notes..." class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="remarks-input">
+            <label class="block text-sm font-medium mb-1">Invoice No</label>
+            <input type="text" id="invoiceNo" placeholder="Auto (e.g. INV1001)" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="invoice-no-input">
+            <p class="text-xs text-gray-500 mt-1">Leave blank to auto-generate.</p>
           </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Remarks</label>
+          <input type="text" id="remarks" placeholder="Optional notes..." class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="remarks-input">
         </div>
       </div>
 
@@ -151,7 +157,8 @@
         doctor_id: document.getElementById('doctorSelect').value,
         consultation_fee: parseFloat(document.getElementById('consultationFee').value) || 0,
         payment_mode: document.getElementById('paymentMode').value,
-        remarks: document.getElementById('remarks').value
+        remarks: document.getElementById('remarks').value,
+        invoice_no: (document.getElementById('invoiceNo') ? document.getElementById('invoiceNo').value : '')
       };
 
       try {
@@ -162,7 +169,6 @@
         });
         const json = await res.json();
         if (json.success) {
-          alert(`OP Booking successful! Token Number: ${json.data.token_number}`);
           window.location.href = `opprint.html?id=${json.data.id}`;
         } else {
           alert(json.message);

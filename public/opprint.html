@@ -3,102 +3,163 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OP Receipt - Kurnool Neuro Psychiatric and ENT Center</title>
+  <title>OP Bill - Kurnool Neuro Psychiatric and ENT Center</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
+    body { background: #f3f4f6; font-family: 'Helvetica Neue', Arial, sans-serif; }
+    .bill-sheet {
+      background: #ffffff;
+      color: #000000;
+      max-width: 960px;
+      margin: 24px auto;
+      padding: 28px 32px 32px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    }
+    .header-title {
+      text-align: center;
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+    .header-sub { text-align: center; font-size: 13px; margin-top: 6px; color: #333; }
+    .header-phone { text-align: center; font-size: 13px; margin-top: 2px; color: #333; }
+    .divider { border-bottom: 2px solid #0f3d8f; margin: 14px 0 22px; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; row-gap: 18px; column-gap: 60px; margin-bottom: 26px; font-size: 13px; }
+    .meta .lbl { color: #444; font-size: 13px; }
+    .meta .val { font-size: 15px; padding-top: 2px; color: #000; min-height: 20px; }
+    table.items { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; border: 1px solid #d1d5db; }
+    table.items thead th { background: #f3f4f6; padding: 10px 12px; text-align: center; font-weight: 700; border: 1px solid #d1d5db; }
+    table.items tbody td { padding: 12px; border: 1px solid #e5e7eb; }
+    table.items td.num { text-align: right; }
+    table.items td.name { padding-left: 14px; }
+    .totals-wrap { display: flex; justify-content: flex-end; margin-top: -1px; }
+    .totals-wrap table { border-collapse: collapse; font-size: 13px; width: 340px; }
+    .totals-wrap td { padding: 10px 12px; border: 1px solid #d1d5db; }
+    .totals-wrap .lbl { background: #f9fafb; }
+    .totals-wrap .val { text-align: right; }
+    .totals-wrap .grand td { font-weight: 800; font-size: 14px; background: #f3f4f6; }
+    .footer-note { margin-top: 28px; font-size: 12px; color: #333; }
+
     @media print {
-      body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .no-print { display: none !important; }
+      .bill-sheet { box-shadow: none; margin: 0; padding: 12mm 14mm; max-width: 100%; }
     }
   </style>
 </head>
-<body class="bg-white text-gray-800 p-8">
-  <div class="max-w-xl mx-auto bg-white p-6 border rounded-lg shadow-sm" id="printArea" data-testid="op-print-container">
-    <!-- Header -->
-    <div class="text-center border-b pb-4 mb-4">
-      <h1 class="text-2xl font-bold text-blue-950">Kurnool Neuro Psychiatric and ENT Center</h1>
-      <p class="text-sm text-gray-600">Specialized Neuro, Psychiatric & ENT Care Hospital</p>
-      <p class="text-xs text-gray-500">Main Road, Kurnool, Andhra Pradesh - 518001</p>
-    </div>
+<body>
 
-    <div class="text-center mb-6 bg-blue-50 py-3 rounded border border-blue-200">
-      <p class="text-xs font-bold text-blue-800 uppercase tracking-wider">Outpatient Token Number</p>
-      <div class="text-4xl font-extrabold text-blue-900 mt-1" id="tokenNumber">--</div>
-    </div>
+  <div class="bill-sheet" id="billSheet" data-testid="op-print-container">
+    <div class="header-title">KURNOOL NEURO PSYCHIATRIC AND ENT CENTER</div>
+    <div class="header-sub">Shop No: 14, J.C.S. Complex, Opp New RTC Bus Stand, Kurnool</div>
+    <div class="header-phone">Ph: 9154794360, 9441088220</div>
+    <div class="divider"></div>
 
-    <!-- OP Meta -->
-    <div class="grid grid-cols-2 gap-4 mb-6 text-sm">
+    <!-- Bill Meta -->
+    <div class="meta">
       <div>
-        <p><span class="font-semibold">OP Bill ID:</span> <span id="opBillId">--</span></p>
-        <p><span class="font-semibold">OP Date:</span> <span id="opDate">--</span></p>
-        <p><span class="font-semibold">Payment Mode:</span> <span id="paymentMode">--</span></p>
+        <div class="lbl">Name :</div>
+        <div class="val" id="patientName">--</div>
       </div>
-      <div class="text-right">
-        <p><span class="font-semibold">Patient Code:</span> <span id="patientCode">--</span></p>
-        <p><span class="font-semibold">Patient Name:</span> <span id="patientName">--</span></p>
-        <p><span class="font-semibold">Age / Gender:</span> <span id="ageGender">--</span></p>
-        <p><span class="font-semibold">Mobile:</span> <span id="mobile">--</span></p>
-      </div>
-    </div>
-
-    <!-- Doctor & Fee -->
-    <div class="border-t border-b py-4 mb-6 text-sm space-y-2">
-      <p><span class="font-semibold">Consulting Doctor:</span> <span id="doctorName" class="font-bold text-blue-900">--</span> (<span id="doctorQual">--</span>)</p>
-      <p class="flex justify-between text-base font-bold text-gray-800 pt-2 border-t">
-        <span>Consultation Fee:</span>
-        <span id="consultationFee" class="text-blue-600">₹0.00</span>
-      </p>
-    </div>
-
-    <!-- Footer Signature -->
-    <div class="flex justify-between items-end pt-6 text-xs text-gray-500">
       <div>
-        <p>Please present token at consultation room.</p>
-        <p>Get well soon!</p>
+        <div class="lbl">Date :</div>
+        <div class="val" id="opDate">--</div>
       </div>
-      <div class="text-center">
-        <div class="h-10"></div>
-        <p class="border-t pt-1 font-semibold text-gray-700">Authorized Signature</p>
+
+      <div>
+        <div class="lbl">Age :</div>
+        <div class="val" id="age">--</div>
+      </div>
+      <div>
+        <div class="lbl">Phone :</div>
+        <div class="val" id="phone">--</div>
+      </div>
+
+      <div>
+        <div class="lbl">Referred By :</div>
+        <div class="val" id="referredBy">--</div>
+      </div>
+      <div>
+        <div class="lbl">Invoice No :</div>
+        <div class="val" id="invoiceNo">--</div>
       </div>
     </div>
+
+    <!-- Items -->
+    <table class="items" data-testid="op-items-table">
+      <thead>
+        <tr>
+          <th style="width: 60%;">Name</th>
+          <th>Amount (₹)</th>
+        </tr>
+      </thead>
+      <tbody id="itemsBody"></tbody>
+    </table>
+
+    <!-- Totals -->
+    <div class="totals-wrap">
+      <table>
+        <tr>
+          <td class="lbl">Subtotal</td>
+          <td class="val" id="subtotal">₹ 0.00</td>
+        </tr>
+        <tr class="grand">
+          <td class="lbl">Grand Total</td>
+          <td class="val" id="grandTotal">₹ 0.00</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="footer-note">Note: Please keep this bill safely to collect reports.</div>
   </div>
 
-  <!-- Print Button -->
-  <div class="text-center mt-6 no-print">
+  <div class="text-center pb-8 no-print">
     <button onclick="window.print()" class="bg-blue-600 text-white px-6 py-2.5 rounded font-bold hover:bg-blue-700 shadow" data-testid="print-action-btn">
-      <i class="fa fa-print mr-2"></i> Print OP Receipt
+      <i class="fa fa-print mr-2"></i> Print OP Bill
     </button>
     <a href="ophistory.html" class="ml-3 bg-gray-200 text-gray-700 px-4 py-2.5 rounded font-medium hover:bg-gray-300">Back to OP History</a>
+    <a href="opbooking.html" class="ml-3 bg-green-600 text-white px-4 py-2.5 rounded font-medium hover:bg-green-700">+ New OP</a>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
   <script>
+    function fmtDate(str) {
+      if (!str) return '--';
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(str);
+      if (m) return `${m[3]} / ${m[2]} / ${m[1]}`;
+      return str;
+    }
+
     async function loadOpPrint() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const id = urlParams.get('id');
-      if (!id) return alert('OP ID not provided');
+      const id = new URLSearchParams(window.location.search).get('id');
+      if (!id) { alert('OP ID not provided'); return; }
 
       try {
         const res = await fetch(`/api/op/print/${id}`);
         const json = await res.json();
-        if (json.success) {
-          const o = json.data;
-          document.getElementById('tokenNumber').innerText = o.token_number;
-          document.getElementById('opBillId').innerText = o.op_bill_id;
-          document.getElementById('opDate').innerText = o.op_date;
-          document.getElementById('paymentMode').innerText = o.payment_mode;
-          document.getElementById('patientCode').innerText = o.patient_code;
-          document.getElementById('patientName').innerText = o.patient_name;
-          document.getElementById('ageGender').innerText = `${o.age || '-'} / ${o.gender || '-'}`;
-          document.getElementById('mobile').innerText = o.mobile || '-';
-          document.getElementById('doctorName').innerText = o.doctor_name;
-          document.getElementById('doctorQual').innerText = o.qualification || '';
-          document.getElementById('consultationFee').innerText = '₹' + (o.consultation_fee || 0).toFixed(2);
-        } else {
-          alert(json.message);
-        }
+        if (!json.success) { alert(json.message); return; }
+
+        const o = json.data;
+        const name = o.patient_name_snapshot || o.patient_name || '--';
+        document.getElementById('patientName').innerText = name;
+        document.getElementById('opDate').innerText = fmtDate(o.op_date);
+        document.getElementById('age').innerText = (o.patient_age_snapshot != null ? o.patient_age_snapshot : (o.age != null ? o.age : '--'));
+        document.getElementById('phone').innerText = o.patient_phone_snapshot || o.mobile || '--';
+        document.getElementById('referredBy').innerText = o.doctor_name || '--';
+        document.getElementById('invoiceNo').innerText = o.invoice_no || o.op_bill_id || '--';
+
+        const fee = Number(o.consultation_fee || 0);
+        document.getElementById('subtotal').innerText = '₹ ' + fee.toFixed(2);
+        document.getElementById('grandTotal').innerText = '₹ ' + fee.toFixed(2);
+
+        const tbody = document.getElementById('itemsBody');
+        tbody.innerHTML = '';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="name">${name}</td><td class="num">${fee.toFixed(0)}</td>`;
+        tbody.appendChild(tr);
       } catch (err) {
         console.error('Error loading OP print', err);
+        alert('Could not load the OP bill.');
       }
     }
     loadOpPrint();

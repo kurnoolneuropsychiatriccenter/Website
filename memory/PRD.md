@@ -28,27 +28,29 @@ Build a working full-stack Clinic Management System for **Kurnool Neuro Psychiat
 ## What's Implemented (Aug 10, 2026)
 - Dashboard with 8 summary tiles + 11 nav cards.
 - Patient / Doctor / Medicine CRUD + search + filters.
-- OP Booking (auto today's date, auto token per day, autofill patient by code).
-- OP History with Today filter, Print, Delete. OP Print page.
+- **OP Booking (Kurnool Neuro Psychiatric and ENT Center format)**: auto today's date, auto token per day, autofill patient by code, doctor as Referred By, optional Invoice No (auto `INV{1000+id}` when blank).
+- **OP Print** exactly matches the Kurnool Neuro reference: bold header, address `Shop No: 14, J.C.S. Complex, Opp New RTC Bus Stand, Kurnool`, `Ph: 9154794360, 9441088220`, 2-col meta grid (Name/Date, Age/Phone, Referred By/Invoice No), item table (Name | Amount), Subtotal + Grand Total, footer `Note: Please keep this bill safely to collect reports.` `.no-print` hides buttons.
+- OP History with Today filter, Print, Delete.
 - Purchase multi-item form (single "Add More Medicine" button), stock increment on save.
 - Purchase History with Today filter, Delete-reverses-stock.
 - **Medical Billing (Asha Medicals format)**: two-column patient/bill meta (Patient Code → auto Name+Phone, Referred By doctor dropdown, Date, Town, Invoice No). Item columns: S.No, Product, Batch, Exp, HSN, MRP, Qty (with stock), Rate, SGST %, CGST %, Amount. Per-item Amount = qty·rate + SGST + CGST. Discount can be entered as % OR ₹ (auto-synced). Over-sell blocked.
-- **Medical Bill Print** exactly matches the Asha Medicals reference (header, address, phone 91 91547 94360, meta grid, item columns, Sub Total / Discount / Grand Total, footer "Goods once sold cannot be returned." + Signature). `.no-print` hides buttons on print.
+- **Medical Bill Print** exactly matches the Asha Medicals reference (header, address, phone 91 91547 94360, meta grid, item columns, Sub Total / Discount / Grand Total, footer "Goods once sold cannot be returned." + Signature).
 - Medical Bill History with Patient Code visible, Print (Asha Medicals layout), Delete-restores-stock.
 - Medicine Return module with stock decrement + history table.
 - Reports page with 10 report types + Today / date-range filters.
 - Dashboard summary API aggregating today's counts + total patients + low stock + expiring.
 - Backend transactional stock changes; delete endpoints no longer race-condition prone.
 - `bill_no` uses `MAX(id)+1` (delete-safe). Reports SQL parameterized.
-- Idempotent `ALTER TABLE ADD COLUMN` migration for the new Asha Medicals fields.
+- Idempotent `ALTER TABLE ADD COLUMN` migration for all new print-format fields (both bills).
 - FastAPI proxy `/app/backend/server.py` routes `/api/*` from ingress to Node on 3000.
 
 ## Testing
 - `/app/backend/tests/test_clinic_api.py` — 31 core backend tests.
-- `/app/backend/tests/test_asha_medicals.py` — 8 tests for the new Asha Medicals bill format (fields saved, reference math 47.25 + 115.50 = 162.75, rupee & % discount, oversell block, delete-restores-stock).
-- Total: **39/39 pytest pass** via preview URL.
-- Playwright UI smoke: dashboard, patients, medicines, purchase, medical billing (new format), OP booking — all pass.
-- Latest report: `/app/test_reports/iteration_3.json` (0 critical, 0 major).
+- `/app/backend/tests/test_asha_medicals.py` — 8 tests for Medical Bill (Asha Medicals) format.
+- `/app/backend/tests/test_op_bill_format.py` — 12 tests for OP Bill (Kurnool Neuro) format.
+- Total: **51/51 pytest pass** via preview URL.
+- Playwright UI smoke: dashboard, patients, medicines, purchase, medical billing print, OP booking print — all pass with exact string match.
+- Latest report: `/app/test_reports/iteration_4.json` (0 critical, 0 major, 0 minor).
 
 ## Local Laptop Setup (Windows/macOS/Linux)
 1. Install Node.js 18+ from https://nodejs.org.
