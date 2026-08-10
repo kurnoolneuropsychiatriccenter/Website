@@ -8,7 +8,7 @@ import pytest
 import requests
 from datetime import datetime
 
-BASE_URL = "http://localhost:3000"
+BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 TODAY = datetime.now().strftime("%Y-%m-%d")
 
 

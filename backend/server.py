@@ -1,89 +1,89 @@
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
-import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
-from datetime import datetime, timezone
+"""
+Clinic Management System - API Proxy
+------------------------------------
+This FastAPI service runs on port 8001 (managed by supervisor) and simply forwards
+every /api/* request to the Node/Express clinic backend that listens on port 3000.
 
+Why: the platform's ingress routes /api/* to port 8001 and everything else to
+port 3000. Because the actual clinic backend (Express + SQLite) lives on port
+3000, this thin proxy makes /api/* work through the preview URL as well.
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+On the user's own laptop this file is not used at all -- they only run
+`node server.js` which serves both the HTML pages and the /api routes on
+port 3000 directly.
+"""
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+import httpx
+from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 
-# Create the main app without a prefix
-app = FastAPI()
+NODE_UPSTREAM = "http://localhost:3000"
 
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
-
-
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class StatusCheckCreate(BaseModel):
-    client_name: str
-
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
-
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
-
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
-
-# Include the router in the main app
-app.include_router(api_router)
+app = FastAPI(title="Clinic API Proxy")
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# Persistent async HTTP client (keeps connections warm)
+_client = httpx.AsyncClient(base_url=NODE_UPSTREAM, timeout=30.0)
+
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "service": "clinic-api-proxy", "upstream": NODE_UPSTREAM}
+
+
+@app.api_route(
+    "/api/{full_path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
 )
-logger = logging.getLogger(__name__)
+async def proxy_api(full_path: str, request: Request):
+    url = f"/api/{full_path}"
+    method = request.method
+
+    # Forward query string
+    if request.url.query:
+        url = f"{url}?{request.url.query}"
+
+    # Forward headers except hop-by-hop / host
+    excluded = {"host", "content-length", "connection", "accept-encoding"}
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in excluded}
+
+    body = await request.body()
+
+    try:
+        upstream_resp = await _client.request(
+            method=method,
+            url=url,
+            headers=headers,
+            content=body if body else None,
+        )
+    except httpx.RequestError as exc:
+        return Response(
+            content=f'{{"success":false,"message":"Upstream node server unreachable: {exc}"}}',
+            status_code=502,
+            media_type="application/json",
+        )
+
+    # Strip hop-by-hop headers on the way back
+    resp_headers = {
+        k: v
+        for k, v in upstream_resp.headers.items()
+        if k.lower() not in {"content-encoding", "transfer-encoding", "connection", "content-length"}
+    }
+    return Response(
+        content=upstream_resp.content,
+        status_code=upstream_resp.status_code,
+        headers=resp_headers,
+        media_type=upstream_resp.headers.get("content-type", "application/json"),
+    )
+
 
 @app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+async def _close_client():
+    await _client.aclose()

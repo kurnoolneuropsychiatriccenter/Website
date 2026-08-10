@@ -1,0 +1,38 @@
+{
+  "summary": "Re-ran full clinic backend pytest suite (31 tests) against REACT_APP_BACKEND_URL preview host and did Playwright UI smoke of the main flows on the preview URL. Ingress /api → FastAPI (8001) → proxy → Node (3000) works end-to-end now. All 31 backend tests PASS (dashboard, patients CRUD w/ KNC001 codes, doctors CRUD, medicines CRUD, purchase w/ stock increment + delete-reverses-stock, OP booking + history + print + delete, medical bill w/ 10% discount math (45→40.5), oversell blocked 400, med-bill history w/ patient_code, print, delete-restores-stock, medicine returns w/ over-stock 400, all 10 report types, MAX(id)+1 bill numbering safe after deletes). UI verified via preview URL: dashboard tiles + nav cards render (total_patients=5 fetched live), Patient add→edit→delete works and KNC001 code shows in table, Purchase page has exactly ONE Add More Medicine button, adding a 2nd row works, qty*rate math correct (3*10=₹30.00) and Grand Total sums, OP Booking loads with doctor dropdown populated, Medical Bill + Reports pages load without console errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/purchase/save", "issue": "grand_total = qty*rate ignores MRP/GST — matches spec but flag for clinic owner confirmation."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All HTML pages", "issues": ["Uses Tailwind CDN (cdn.tailwindcss.com) — console warns 'should not be used in production'. Non-blocking for internal single-clinic app but should be switched to Tailwind CLI/PostCSS build for production."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_clinic_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Consider extracting stock-mutation logic (purchase/medicalbill/returns) into a helper in server.js.",
+    "server.js is ~979 lines — split into route modules for maintainability.",
+    "test_zz_cleanup fixture in /app/backend/tests/test_clinic_api.py has a small bug: it uses state.get(path.split('/')[-1]) which reads a numeric-id string as key and always returns None, so TEST_ medicines/doctors were not being cleaned up. I manually cleaned two leftover TEST_Med_A and TEST_Dr_X2 rows. Suggest fixing the fixture logic (iterate over ('patient_id','doctor_id','medicine_id') keys directly).",
+    "Build Tailwind properly for production instead of using the CDN."
+  ],
+  "critical_code_review_comments": [
+    "The FastAPI proxy is a clean minimal fix (streams bytes, forwards method+headers+body+query, 502s on upstream down) — good.",
+    "The proxy strips content-encoding on the way back which is correct (upstream body is already decoded).",
+    "SQL string interpolation in /api/reports/:type was reported as fixed to parameterized — verified all 10 report types return 200 with success=true.",
+    "bill_no now MAX(id)+1 is delete-safe — verified by delete-then-create flows implicitly across tests.",
+    "server.js still >900 lines — split-recommendation stands.",
+    "Callback-nested sqlite3 code retains multiple 'if err' branches; consider promisifying db.run/db.get for cleaner transactions."
+  ],
+  "updated_files": ["/app/backend/tests/test_clinic_api.py"],
+  "success_rate": {"backend": "100% (31/31 via preview URL)", "frontend": "All smoke-tested pages load and interact successfully via preview URL"},
+  "seed_data_creation": "Tests create/cleanup TEST_ prefixed data. Manually cleaned 2 leftover TEST_ medicines (ids 3,4) and 2 leftover TEST_ doctors (ids 3,4) from prior iterations. Seed data (KNC001000001 Venkat Reddy, KNC001000002 Lakshmi Devi, 2 doctors, 2 medicines) intact.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend tests at /app/backend/tests/test_clinic_api.py now use BASE_URL=os.environ['REACT_APP_BACKEND_URL']. Ingress→FastAPI proxy→Node is working. Cleanup fixture (test_zz_cleanup) has a minor bug that leaves TEST_ data behind — fix if you rerun repeatedly.",
+  "rca of the issue": "Original user complaint 'some functions or actions not working' was caused by K8s ingress routing /api/* to FastAPI on 8001 while the clinic Node backend lived on 3000, so every UI fetch('/api/*') returned 404. Fix applied: /app/backend/server.py rewritten as a thin async FastAPI proxy forwarding /api/* to http://localhost:3000. Verified end-to-end: identical JSON returned from localhost:3000/api and preview-URL/api; 31/31 backend tests pass through preview URL; UI CRUD flows verified via Playwright on preview URL."
+}

@@ -659,9 +659,9 @@ app.post('/api/medicalbill/save', (req, res) => {
         // Proceed with saving bill and decrementing stock
         const dateStr = bill_date || getTodayDate();
         
-        // Generate Bill No
-        db.get(`SELECT COUNT(*) as count FROM medical_bills`, (err, row) => {
-          const billNoNum = (row ? row.count : 0) + 1;
+        // Generate Bill No using max id (delete-safe)
+        db.get(`SELECT MAX(id) as max_id FROM medical_bills`, (err, row) => {
+          const billNoNum = ((row && row.max_id) ? row.max_id : 0) + 1;
           const bill_no = `MED-${dateStr.replace(/-/g, '')}-${String(billNoNum).padStart(4, '0')}`;
 
           items.forEach(i => {
@@ -912,8 +912,8 @@ app.get('/api/dashboard/summary', (req, res) => {
 app.get('/api/reports/:type', (req, res) => {
   const type = req.params.type;
   const { from_date, to_date, today } = req.query;
-  let dateFilterCol = 'op_date';
   let query = '';
+  let params = [];
 
   if (type === 'todays_op' || type === 'op_collection') {
     query = `
@@ -923,8 +923,8 @@ app.get('/api/reports/:type', (req, res) => {
       JOIN doctors d ON o.doctor_id = d.id
       WHERE 1=1
     `;
-    if (today === 'true') query += ` AND o.op_date = '${getTodayDate()}'`;
-    else if (from_date && to_date) query += ` AND o.op_date BETWEEN '${from_date}' AND '${to_date}'`;
+    if (today === 'true') { query += ` AND o.op_date = ?`; params.push(getTodayDate()); }
+    else if (from_date && to_date) { query += ` AND o.op_date BETWEEN ? AND ?`; params.push(from_date, to_date); }
   } else if (type === 'medical_sales') {
     query = `
       SELECT mb.bill_no as ref_no, mb.bill_date, p.patient_code, p.patient_name, p.mobile, mb.subtotal, mb.discount_amount, mb.grand_total as amount
@@ -932,16 +932,16 @@ app.get('/api/reports/:type', (req, res) => {
       JOIN patients p ON mb.patient_id = p.id
       WHERE 1=1
     `;
-    if (today === 'true') query += ` AND mb.bill_date = '${getTodayDate()}'`;
-    else if (from_date && to_date) query += ` AND mb.bill_date BETWEEN '${from_date}' AND '${to_date}'`;
+    if (today === 'true') { query += ` AND mb.bill_date = ?`; params.push(getTodayDate()); }
+    else if (from_date && to_date) { query += ` AND mb.bill_date BETWEEN ? AND ?`; params.push(from_date, to_date); }
   } else if (type === 'purchase') {
     query = `
       SELECT p.invoice_no as ref_no, p.invoice_date as bill_date, p.supplier_name, p.grand_total as amount
       FROM purchases p
       WHERE 1=1
     `;
-    if (today === 'true') query += ` AND p.invoice_date = '${getTodayDate()}'`;
-    else if (from_date && to_date) query += ` AND p.invoice_date BETWEEN '${from_date}' AND '${to_date}'`;
+    if (today === 'true') { query += ` AND p.invoice_date = ?`; params.push(getTodayDate()); }
+    else if (from_date && to_date) { query += ` AND p.invoice_date BETWEEN ? AND ?`; params.push(from_date, to_date); }
   } else if (type === 'stock') {
     query = `SELECT * FROM medicines ORDER BY medicine_name`;
   } else if (type === 'low_stock') {
@@ -967,7 +967,7 @@ app.get('/api/reports/:type', (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid report type' });
   }
 
-  db.all(query, [], (err, rows) => {
+  db.all(query, params, (err, rows) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     res.json({ success: true, data: rows });
   });
