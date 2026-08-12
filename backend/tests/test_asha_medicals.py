@@ -192,7 +192,7 @@ def test_fixed_rupee_discount(s, state):
 def test_medicines_endpoint_still_healthy(s):
     r = s.get(f"{BASE_URL}/api/medicines")
     assert r.status_code == 200
-    assert r.json()["success"] is True
+    assert r.json()["success"]
 
 
 # --- DELETE restores stock ---

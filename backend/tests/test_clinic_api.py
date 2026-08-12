@@ -29,7 +29,7 @@ def test_dashboard_summary(s):
     r = s.get(f"{BASE_URL}/api/dashboard/summary")
     assert r.status_code == 200
     data = r.json()
-    assert data["success"] is True
+    assert data["success"]
     for k in ["todays_op_count", "todays_patients", "todays_medical_bills",
               "todays_medical_collection", "todays_purchase", "total_patients",
               "low_stock_medicines", "expiring_medicines"]:
@@ -40,7 +40,7 @@ def test_dashboard_summary(s):
 def test_patients_list(s):
     r = s.get(f"{BASE_URL}/api/patients")
     assert r.status_code == 200
-    assert r.json()["success"] is True
+    assert r.json()["success"]
 
 
 def test_patient_create_and_get(s, state):
@@ -231,7 +231,7 @@ def test_reports(s, rtype):
     q = "?today=true" if rtype in ("todays_op", "op_collection", "medical_sales", "purchase") else ""
     r = s.get(f"{BASE_URL}/api/reports/{rtype}{q}")
     assert r.status_code == 200, f"{rtype}: {r.text}"
-    assert r.json()["success"] is True
+    assert r.json()["success"]
 
 
 # ---------------- Deletes: stock reverse/restore ----------------

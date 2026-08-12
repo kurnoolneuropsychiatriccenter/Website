@@ -42,9 +42,10 @@ async def root():
     "/api/{full_path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
 )
-async def proxy_api(full_path: str, request: Request):
-    url = f"/api/{full_path}"
-    method = request.method
+async def proxy_api(full_path: str, request: Request) -> Response:
+    """Forward every /api/* request to the Node clinic backend on port 3000."""
+    url: str = f"/api/{full_path}"
+    method: str = request.method
 
     # Forward query string
     if request.url.query:
@@ -54,8 +55,9 @@ async def proxy_api(full_path: str, request: Request):
     excluded = {"host", "content-length", "connection", "accept-encoding"}
     headers = {k: v for k, v in request.headers.items() if k.lower() not in excluded}
 
-    body = await request.body()
+    body: bytes = await request.body()
 
+    upstream_resp = None  # type: ignore  # explicitly defined so downstream code has a guaranteed binding
     try:
         upstream_resp = await _client.request(
             method=method,
@@ -66,6 +68,13 @@ async def proxy_api(full_path: str, request: Request):
     except httpx.RequestError as exc:
         return Response(
             content=f'{{"success":false,"message":"Upstream node server unreachable: {exc}"}}',
+            status_code=502,
+            media_type="application/json",
+        )
+
+    if upstream_resp is None:  # defensive: unreachable in practice
+        return Response(
+            content='{"success":false,"message":"Upstream response missing"}',
             status_code=502,
             media_type="application/json",
         )

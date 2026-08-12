@@ -143,7 +143,7 @@ function useToast() {
         listeners.splice(index, 1)
       }
     };
-  }, [state])
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps -- listeners is a module-level array; setState is stable; index is local to the cleanup function
 
   return {
     ...state,

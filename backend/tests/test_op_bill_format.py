@@ -35,7 +35,7 @@ def test_create_arif_patient(s, state):
     })
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["success"] is True
+    assert data["success"]
     assert "id" in data["data"]
     state["patient_id"] = data["data"]["id"]
     state["patient_code"] = data["data"]["patient_code"]
@@ -62,7 +62,7 @@ def test_op_save_auto_invoice(s, state):
     })
     assert r.status_code == 200, r.text
     d = r.json()
-    assert d["success"] is True
+    assert d["success"]
     inv = d["data"]["invoice_no"]
     assert inv and inv.startswith("INV"), f"Expected auto INV*, got {inv}"
     # Should be INV{>=1001}
@@ -143,13 +143,13 @@ def test_op_history_regression(s, state):
 def test_dashboard_regression(s):
     r = s.get(f"{BASE_URL}/api/dashboard/summary")
     assert r.status_code == 200
-    assert r.json()["success"] is True
+    assert r.json()["success"]
 
 
 def test_op_delete_regression(s, state):
     r = s.delete(f"{BASE_URL}/api/op/{state['op_auto_id']}")
     assert r.status_code == 200
-    assert r.json()["success"] is True
+    assert r.json()["success"]
 
 
 # ---------- Idempotent ALTER TABLE - restart server ----------
