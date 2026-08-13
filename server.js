@@ -2,6 +2,8 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const path = require('path');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,6 +12,103 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// =============================================================================
+// AUTHENTICATION
+// =============================================================================
+const sessions = new Map(); // token -> { expiresAt }
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+function makeToken() { return crypto.randomBytes(24).toString('hex'); }
+
+function getSetting(key) {
+  return new Promise((resolve) => {
+    db.get(`SELECT svalue FROM settings WHERE skey = ?`, [key], (err, row) => resolve(row ? row.svalue : null));
+  });
+}
+
+function setSetting(key, value) {
+  return new Promise((resolve) => {
+    db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES (?, ?)`, [key, value], () => resolve());
+  });
+}
+
+// Public endpoints (no auth required)
+app.post('/api/auth/login', async (req, res) => {
+  const { password } = req.body || {};
+  if (!password) return res.status(400).json({ success: false, message: 'Password required' });
+  const hash = await getSetting('login_password_hash');
+  if (!hash || !bcrypt.compareSync(password, hash)) {
+    return res.status(401).json({ success: false, message: 'Wrong password' });
+  }
+  const token = makeToken();
+  sessions.set(token, { expiresAt: Date.now() + SESSION_TTL_MS });
+  res.json({ success: true, data: { token } });
+});
+
+// Guard: every /api/* request except a small whitelist needs a valid Bearer token
+app.use('/api', (req, res, next) => {
+  if (req.path === '/auth/login' || req.path === '/public/gst') return next();
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  const s = token && sessions.get(token);
+  if (!s || s.expiresAt < Date.now()) {
+    return res.status(401).json({ success: false, message: 'Not logged in' });
+  }
+  // slide expiry
+  s.expiresAt = Date.now() + SESSION_TTL_MS;
+  next();
+});
+
+// Guard: every DELETE /api/* needs the correct delete password header
+app.use('/api', async (req, res, next) => {
+  if (req.method !== 'DELETE') return next();
+  const pw = req.headers['x-delete-password'];
+  if (!pw) return res.status(401).json({ success: false, message: 'Delete password required' });
+  const hash = await getSetting('delete_password_hash');
+  if (!hash || !bcrypt.compareSync(String(pw), hash)) {
+    return res.status(401).json({ success: false, message: 'Wrong delete password' });
+  }
+  next();
+});
+
+// Change either the login or delete password (requires current login password + type)
+app.post('/api/auth/change-password', async (req, res) => {
+  const { type, current_password, new_password } = req.body || {};
+  if (!['login', 'delete'].includes(type)) return res.status(400).json({ success: false, message: 'type must be login or delete' });
+  if (!new_password || new_password.length < 4) return res.status(400).json({ success: false, message: 'New password must be at least 4 characters' });
+  const loginHash = await getSetting('login_password_hash');
+  if (!loginHash || !bcrypt.compareSync(String(current_password || ''), loginHash)) {
+    return res.status(401).json({ success: false, message: 'Current login password is wrong' });
+  }
+  // Enforce: login and delete passwords must not be same
+  const otherKey = type === 'login' ? 'delete_password_hash' : 'login_password_hash';
+  const otherHash = await getSetting(otherKey);
+  if (otherHash && bcrypt.compareSync(String(new_password), otherHash)) {
+    return res.status(400).json({ success: false, message: 'Login and Delete passwords must be different' });
+  }
+  const newHash = bcrypt.hashSync(String(new_password), 10);
+  await setSetting(type === 'login' ? 'login_password_hash' : 'delete_password_hash', newHash);
+  res.json({ success: true, message: 'Password changed' });
+});
+
+// Settings: GST number, etc.
+app.get('/api/settings', async (req, res) => {
+  const gst = (await getSetting('gst_number')) || '';
+  res.json({ success: true, data: { gst_number: gst } });
+});
+app.put('/api/settings', async (req, res) => {
+  const { gst_number } = req.body || {};
+  if (gst_number !== undefined) await setSetting('gst_number', String(gst_number));
+  res.json({ success: true, message: 'Settings saved' });
+});
+
+// Public-safe GST getter for print pages (no auth to allow print reload after session expiry — read-only string)
+app.get('/api/public/gst', async (req, res) => {
+  const gst = (await getSetting('gst_number')) || '';
+  res.json({ success: true, data: { gst_number: gst } });
+});
+
 
 // Database setup
 const dbFile = path.join(__dirname, 'clinic.db');
@@ -168,6 +267,53 @@ function initDb() {
       supplier TEXT,
       FOREIGN KEY(medicine_id) REFERENCES medicines(id)
     )`);
+
+    // Settings (key/value pairs: login_password_hash, delete_password_hash, gst_number, clinic settings, etc.)
+    db.run(`CREATE TABLE IF NOT EXISTS settings (
+      skey TEXT PRIMARY KEY,
+      svalue TEXT
+    )`);
+
+    // Lab Bills Master (Dr. Rahiman Diagnostics)
+    db.run(`CREATE TABLE IF NOT EXISTS lab_bills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_no TEXT UNIQUE,
+      bill_date TEXT,
+      patient_id INTEGER,
+      patient_name_snapshot TEXT,
+      patient_phone_snapshot TEXT,
+      patient_age_snapshot INTEGER,
+      referred_by_doctor_id INTEGER,
+      invoice_no TEXT,
+      subtotal REAL,
+      discount_percent REAL,
+      discount_amount REAL,
+      grand_total REAL,
+      notes TEXT,
+      FOREIGN KEY(patient_id) REFERENCES patients(id),
+      FOREIGN KEY(referred_by_doctor_id) REFERENCES doctors(id)
+    )`);
+
+    // Lab Bill Items (test rows)
+    db.run(`CREATE TABLE IF NOT EXISTS lab_bill_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lab_bill_id INTEGER,
+      test_name TEXT,
+      rate REAL,
+      amount REAL,
+      FOREIGN KEY(lab_bill_id) REFERENCES lab_bills(id) ON DELETE CASCADE
+    )`);
+
+    // Seed default login+delete passwords + empty GST number on FIRST boot
+    db.get(`SELECT svalue FROM settings WHERE skey = 'login_password_hash'`, (err, row) => {
+      if (!row) {
+        const loginHash = bcrypt.hashSync('admin123', 10);
+        const deleteHash = bcrypt.hashSync('delete123', 10);
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('login_password_hash', ?)`, [loginHash]);
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('delete_password_hash', ?)`, [deleteHash]);
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('gst_number', '')`);
+      }
+    });
 
     // Seed sample doctor if none exists
     db.get(`SELECT COUNT(*) as count FROM doctors`, (err, row) => {
@@ -1030,6 +1176,108 @@ app.get('/api/reports/:type', (req, res) => {
   db.all(query, params, (err, rows) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     res.json({ success: true, data: rows });
+  });
+});
+
+// =============================================================================
+// LAB BILL API (Dr. Rahiman Diagnostics)
+// =============================================================================
+app.post('/api/labbill/save', (req, res) => {
+  const { bill_date, patient_id, referred_by_doctor_id, invoice_no, discount_percent, discount_amount: discAmtIn, items, notes } = req.body || {};
+  if (!patient_id) return res.status(400).json({ success: false, message: 'Patient Code / ID is required' });
+  if (!items || !items.length) return res.status(400).json({ success: false, message: 'No test items in lab bill' });
+
+  const dateStr = bill_date || getTodayDate();
+
+  db.get(`SELECT patient_name, mobile, age FROM patients WHERE id = ?`, [patient_id], (err, p) => {
+    if (err || !p) return res.status(400).json({ success: false, message: 'Patient not found' });
+
+    db.get(`SELECT MAX(id) as max_id FROM lab_bills`, (e, r) => {
+      const nextId = ((r && r.max_id) ? r.max_id : 0) + 1;
+      const bill_no = `LAB-${dateStr.replace(/-/g, '')}-${String(nextId).padStart(4, '0')}`;
+      const finalInvoiceNo = (invoice_no && String(invoice_no).trim()) ? String(invoice_no).trim() : `INV${2000 + nextId}`;
+
+      let subtotal = 0;
+      const computed = items.map(it => {
+        const rate = parseFloat(it.rate) || 0;
+        const amount = +(rate).toFixed(2);
+        subtotal += amount;
+        return { test_name: it.test_name || '', rate, amount };
+      });
+      subtotal = +subtotal.toFixed(2);
+      const discPct = parseFloat(discount_percent) || 0;
+      const discAmt = discAmtIn != null && discAmtIn !== '' ? parseFloat(discAmtIn) : +(subtotal * discPct / 100).toFixed(2);
+      const grand_total = +(subtotal - discAmt).toFixed(2);
+
+      db.run(
+        `INSERT INTO lab_bills (bill_no, bill_date, patient_id, patient_name_snapshot, patient_phone_snapshot, patient_age_snapshot,
+                                referred_by_doctor_id, invoice_no, subtotal, discount_percent, discount_amount, grand_total, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [bill_no, dateStr, patient_id, p.patient_name, p.mobile || '', p.age || null,
+         referred_by_doctor_id || null, finalInvoiceNo, subtotal, discPct, discAmt, grand_total, notes || ''],
+        function(err2) {
+          if (err2) return res.status(500).json({ success: false, message: err2.message });
+          const lab_bill_id = this.lastID;
+          let done = 0, hadError = false;
+          computed.forEach(ci => {
+            db.run(
+              `INSERT INTO lab_bill_items (lab_bill_id, test_name, rate, amount) VALUES (?, ?, ?, ?)`,
+              [lab_bill_id, ci.test_name, ci.rate, ci.amount],
+              (err3) => {
+                if (err3) hadError = true;
+                done++;
+                if (done === computed.length) {
+                  if (hadError) return res.status(500).json({ success: false, message: 'Error saving lab bill items' });
+                  res.json({ success: true, data: { lab_bill_id, bill_no, invoice_no: finalInvoiceNo, grand_total } });
+                }
+              }
+            );
+          });
+        }
+      );
+    });
+  });
+});
+
+app.get('/api/labbill/history', (req, res) => {
+  const { from_date, to_date, today, search } = req.query;
+  let q = `SELECT lb.*, p.patient_code, p.patient_name, p.mobile
+           FROM lab_bills lb LEFT JOIN patients p ON lb.patient_id = p.id WHERE 1=1`;
+  const params = [];
+  if (today === 'true') { q += ` AND lb.bill_date = ?`; params.push(getTodayDate()); }
+  else if (from_date && to_date) { q += ` AND lb.bill_date BETWEEN ? AND ?`; params.push(from_date, to_date); }
+  if (search) { q += ` AND (lb.bill_no LIKE ? OR lb.invoice_no LIKE ? OR p.patient_code LIKE ? OR p.patient_name LIKE ? OR p.mobile LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); }
+  q += ` ORDER BY lb.id DESC`;
+  db.all(q, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+app.get('/api/labbill/print/:id', (req, res) => {
+  db.get(`SELECT lb.*, p.patient_code, p.patient_name, p.mobile,
+                 d.doctor_name AS referred_by_name, d.qualification AS referred_by_qual
+          FROM lab_bills lb
+          LEFT JOIN patients p ON lb.patient_id = p.id
+          LEFT JOIN doctors d ON lb.referred_by_doctor_id = d.id
+          WHERE lb.id = ?`, [req.params.id], (err, bill) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (!bill) return res.status(404).json({ success: false, message: 'Lab bill not found' });
+    db.all(`SELECT * FROM lab_bill_items WHERE lab_bill_id = ? ORDER BY id`, [req.params.id], (err2, items) => {
+      if (err2) return res.status(500).json({ success: false, message: err2.message });
+      res.json({ success: true, data: { ...bill, items } });
+    });
+  });
+});
+
+app.delete('/api/labbill/:id', (req, res) => {
+  db.run(`DELETE FROM lab_bill_items WHERE lab_bill_id = ?`, [req.params.id], (e1) => {
+    if (e1) return res.status(500).json({ success: false, message: e1.message });
+    db.run(`DELETE FROM lab_bills WHERE id = ?`, [req.params.id], (e2) => {
+      if (e2) return res.status(500).json({ success: false, message: e2.message });
+      res.json({ success: true, message: 'Lab bill deleted' });
+    });
   });
 });
 

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab Bill History - Dr. Rahiman Diagnostics</title>
+  <script src="js/auth.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Lab Bill History</h1>
+      </div>
+      <div class="space-x-3">
+        <a href="labbill.html" class="bg-green-600 px-3 py-1.5 rounded text-sm font-medium hover:bg-green-700"><i class="fa fa-plus mr-1"></i> New Lab Bill</a>
+        <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6">
+    <div class="bg-white p-4 rounded-lg shadow mb-6 flex flex-wrap items-center gap-4">
+      <div class="flex items-center gap-2"><label class="text-sm font-medium">From:</label><input type="date" id="fromDate" class="border px-3 py-1.5 rounded text-sm" data-testid="from-date-input"></div>
+      <div class="flex items-center gap-2"><label class="text-sm font-medium">To:</label><input type="date" id="toDate" class="border px-3 py-1.5 rounded text-sm" data-testid="to-date-input"></div>
+      <input type="text" id="searchInput" placeholder="Bill No, Patient Code, Name..." class="border px-3 py-2 rounded text-sm w-64" data-testid="search-input">
+      <label class="text-sm font-medium flex items-center gap-1"><input type="checkbox" id="todayFilter" checked onchange="load()" data-testid="today-filter"> Today</label>
+      <button onclick="load()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700" data-testid="filter-btn"><i class="fa fa-filter mr-1"></i> Apply</button>
+    </div>
+
+    <div class="bg-white rounded-lg shadow overflow-x-auto">
+      <table class="w-full text-left border-collapse" data-testid="lab-bill-history-table">
+        <thead>
+          <tr class="bg-blue-50 text-blue-900 border-b text-xs">
+            <th class="p-3">Bill No</th><th class="p-3">Invoice</th><th class="p-3">Date</th>
+            <th class="p-3">Patient Code</th><th class="p-3">Patient Name</th><th class="p-3">Mobile</th>
+            <th class="p-3">Subtotal</th><th class="p-3">Discount</th><th class="p-3">Grand Total</th>
+            <th class="p-3 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="body" class="divide-y text-sm"><tr><td colspan="10" class="p-6 text-center text-gray-500">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    async function load() {
+      const today = document.getElementById('todayFilter').checked;
+      const from_date = document.getElementById('fromDate').value;
+      const to_date = document.getElementById('toDate').value;
+      const search = document.getElementById('searchInput').value;
+      let url = `/api/labbill/history?today=${today}`;
+      if (!today && from_date && to_date) url = `/api/labbill/history?from_date=${from_date}&to_date=${to_date}&today=false`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+      const r = await fetch(url); const j = await r.json();
+      const tbody = document.getElementById('body'); tbody.innerHTML = '';
+      if (j.success && j.data.length) {
+        j.data.forEach(b => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="p-3 font-semibold text-blue-600">${b.bill_no}</td>
+            <td class="p-3">${b.invoice_no || '-'}</td>
+            <td class="p-3">${b.bill_date}</td>
+            <td class="p-3 font-medium">${b.patient_code || '-'}</td>
+            <td class="p-3">${b.patient_name || b.patient_name_snapshot || '-'}</td>
+            <td class="p-3">${b.mobile || b.patient_phone_snapshot || '-'}</td>
+            <td class="p-3">₹${Number(b.subtotal || 0).toFixed(2)}</td>
+            <td class="p-3 text-red-600">₹${Number(b.discount_amount || 0).toFixed(2)}</td>
+            <td class="p-3 font-bold text-green-700">₹${Number(b.grand_total || 0).toFixed(2)}</td>
+            <td class="p-3 text-center space-x-2">
+              <a href="labbillprint.html?id=${b.id}" target="_blank" class="text-blue-600 hover:text-blue-800" title="Print" data-testid="print-lab-${b.id}"><i class="fa fa-print"></i></a>
+              <button onclick="del(${b.id})" class="text-red-600 hover:text-red-800" title="Delete" data-testid="delete-lab-${b.id}"><i class="fa fa-trash"></i></button>
+            </td>`;
+          tbody.appendChild(tr);
+        });
+      } else {
+        tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-gray-500">No lab bills found.</td></tr>`;
+      }
+    }
+    async function del(id) {
+      if (!confirm('Delete this lab bill?')) return;
+      const r = await fetch(`/api/labbill/${id}`, { method: 'DELETE' });
+      const j = await r.json();
+      if (j.success) { alert('Deleted.'); load(); } else alert(j.message);
+    }
+    document.getElementById('fromDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('toDate').value = new Date().toISOString().split('T')[0];
+    load();
+  </script>
+</body>
+</html>

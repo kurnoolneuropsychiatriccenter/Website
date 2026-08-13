@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab Bill - Dr. Rahiman Diagnostics</title>
+  <script src="js/auth.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Lab Bill (Dr. Rahiman Diagnostics)</h1>
+      </div>
+      <div class="space-x-3">
+        <a href="labbillhistory.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-history mr-1"></i> Lab History</a>
+        <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6">
+    <form onsubmit="saveLabBill(event)">
+      <div class="bg-white p-6 rounded-lg shadow mb-6 text-center border-b-2 border-gray-800">
+        <h1 class="text-2xl font-extrabold tracking-wide text-gray-900">DR. RAHIMAN DIAGNOSTICS</h1>
+        <p class="text-xs text-gray-600 mt-1">Shop No: 14, J.C.S. Complex, Opp New RTC Bus Stand, Kurnool</p>
+        <p class="text-xs text-gray-700 mt-1">Ph: 9154794360, 9441088220</p>
+      </div>
+
+      <div class="bg-white p-6 rounded-lg shadow mb-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Patient Code *</label>
+            <div class="flex">
+              <input type="text" id="patientCode" required placeholder="e.g. KNC001000001" class="w-full border px-3 py-2 rounded-l text-sm uppercase focus:outline-blue-500" onblur="fetchPatient()" data-testid="patient-code-input">
+              <button type="button" onclick="fetchPatient()" class="bg-blue-600 text-white px-3 rounded-r text-sm" data-testid="fetch-patient-btn"><i class="fa fa-search"></i></button>
+            </div>
+            <input type="hidden" id="patientId">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Patient Name</label>
+            <input type="text" id="patientName" readonly class="w-full border bg-gray-100 px-3 py-2 rounded text-sm font-medium" data-testid="patient-name-input">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Age</label>
+              <input type="text" id="patientAge" readonly class="w-full border bg-gray-100 px-3 py-2 rounded text-sm" data-testid="patient-age-input">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Phone</label>
+              <input type="text" id="patientPhone" readonly class="w-full border bg-gray-100 px-3 py-2 rounded text-sm" data-testid="patient-phone-input">
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Referred By</label>
+            <select id="referredBy" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="referred-by-select">
+              <option value="">-- Select Doctor --</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Date *</label>
+            <input type="date" id="billDate" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="bill-date-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Invoice No</label>
+            <input type="text" id="invoiceNo" placeholder="Auto (e.g. INV2001)" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="invoice-no-input">
+            <p class="text-xs text-gray-500 mt-1">Leave blank to auto-generate.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Notes / Remarks</label>
+            <textarea id="notes" rows="2" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="notes-input"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white p-6 rounded-lg shadow mb-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-bold text-gray-800">Tests</h2>
+          <button type="button" onclick="addTestRow()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700" data-testid="add-more-test-btn">
+            <i class="fa fa-plus mr-1"></i> Add More Test
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm" data-testid="lab-items-table">
+            <thead>
+              <tr class="bg-blue-50 text-blue-900 border-b">
+                <th class="p-2 w-10">S.No</th>
+                <th class="p-2">Test Name</th>
+                <th class="p-2 w-32">Amount (₹)</th>
+                <th class="p-2 w-10"></th>
+              </tr>
+            </thead>
+            <tbody id="rowsBody" class="divide-y"></tbody>
+          </table>
+        </div>
+
+        <div class="mt-6 border-t pt-4 flex flex-col md:flex-row justify-between items-end">
+          <div class="w-full md:w-1/3 mb-4 md:mb-0 space-y-3">
+            <div>
+              <label class="block text-sm font-medium mb-1">Discount</label>
+              <div class="flex items-center gap-2">
+                <input type="number" id="discountPercent" min="0" max="100" value="0" step="0.5" class="w-24 border px-3 py-2 rounded text-sm focus:outline-blue-500" oninput="onDiscountPercentChange()" data-testid="discount-percent-input">
+                <span class="text-sm text-gray-600">%</span>
+                <span class="text-xs text-gray-500">OR</span>
+                <input type="number" id="discountAmount" min="0" value="0" step="0.01" class="w-28 border px-3 py-2 rounded text-sm focus:outline-blue-500" oninput="onDiscountAmountChange()" data-testid="discount-amount-input">
+                <span class="text-sm text-gray-600">₹</span>
+              </div>
+            </div>
+          </div>
+          <div class="w-full md:w-1/3 text-right space-y-2 bg-gray-50 p-4 rounded-lg border">
+            <div class="flex justify-between text-sm"><span class="text-gray-600">Subtotal:</span><span id="subtotalDisplay" class="font-bold text-gray-800" data-testid="subtotal-display">0.00</span></div>
+            <div class="flex justify-between text-sm"><span class="text-gray-600">Discount:</span><span id="discountAmountDisplay" class="font-bold text-red-600" data-testid="discount-amount-display">0.00</span></div>
+            <div class="flex justify-between text-lg border-t pt-2"><span class="font-bold text-gray-800">Grand Total:</span><span id="grandTotalDisplay" class="font-bold text-blue-700 text-2xl" data-testid="grand-total-display">0.00</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end">
+        <button type="submit" class="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700 shadow-lg text-lg" data-testid="save-lab-bill-btn">
+          <i class="fa fa-flask mr-2"></i> Save Lab Bill & Print
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    let discountMode = 'percent';
+
+    async function init() {
+      document.getElementById('billDate').value = new Date().toISOString().split('T')[0];
+      const dj = await (await fetch('/api/doctors')).json();
+      const sel = document.getElementById('referredBy');
+      (dj.data || []).forEach(d => {
+        const o = document.createElement('option');
+        o.value = d.id; o.innerText = `${d.doctor_name}${d.qualification ? ' (' + d.qualification + ')' : ''}`;
+        sel.appendChild(o);
+      });
+      addTestRow();
+    }
+
+    async function fetchPatient() {
+      const code = document.getElementById('patientCode').value.trim();
+      if (!code) return;
+      const r = await fetch(`/api/patients/code/${encodeURIComponent(code)}`);
+      const j = await r.json();
+      if (j.success && j.data) {
+        const p = j.data;
+        document.getElementById('patientId').value = p.id;
+        document.getElementById('patientName').value = p.patient_name || '';
+        document.getElementById('patientAge').value = p.age || '';
+        document.getElementById('patientPhone').value = p.mobile || '';
+      } else {
+        alert('Patient not found with code: ' + code);
+      }
+    }
+
+    function addTestRow() {
+      const tbody = document.getElementById('rowsBody');
+      const rid = 'r' + Date.now() + Math.floor(Math.random() * 1000);
+      const tr = document.createElement('tr');
+      tr.id = rid;
+      tr.innerHTML = `
+        <td class="p-2 sno-cell font-semibold text-gray-700">1</td>
+        <td class="p-2"><input type="text" class="border px-2 py-1 rounded text-sm w-full test-name" placeholder="e.g. CBC / X-Ray / MRI" required data-testid="test-name-input"></td>
+        <td class="p-2"><input type="number" step="0.01" min="0" value="0" class="border px-2 py-1 rounded text-sm w-full rate-input" oninput="calcTotals()" required data-testid="test-rate-input"></td>
+        <td class="p-2 text-center"><button type="button" onclick="removeRow('${rid}')" class="text-red-600 hover:text-red-800" data-testid="remove-test-btn"><i class="fa fa-trash"></i></button></td>
+      `;
+      tbody.appendChild(tr);
+      renumber();
+    }
+    function renumber() {
+      document.querySelectorAll('#rowsBody tr').forEach((tr, i) => tr.querySelector('.sno-cell').innerText = (i + 1));
+    }
+    function calcTotals() {
+      let subtotal = 0;
+      document.querySelectorAll('#rowsBody tr').forEach(tr => { subtotal += parseFloat(tr.querySelector('.rate-input').value) || 0; });
+      subtotal = +subtotal.toFixed(2);
+      document.getElementById('subtotalDisplay').innerText = subtotal.toFixed(2);
+      let discAmt;
+      if (discountMode === 'percent') {
+        const p = parseFloat(document.getElementById('discountPercent').value) || 0;
+        discAmt = +(subtotal * p / 100).toFixed(2);
+        document.getElementById('discountAmount').value = discAmt.toFixed(2);
+      } else {
+        discAmt = parseFloat(document.getElementById('discountAmount').value) || 0;
+        const p = subtotal > 0 ? +((discAmt / subtotal) * 100).toFixed(2) : 0;
+        document.getElementById('discountPercent').value = p;
+      }
+      document.getElementById('discountAmountDisplay').innerText = discAmt.toFixed(2);
+      document.getElementById('grandTotalDisplay').innerText = (subtotal - discAmt).toFixed(2);
+    }
+    function onDiscountPercentChange() { discountMode = 'percent'; calcTotals(); }
+    function onDiscountAmountChange()  { discountMode = 'amount';  calcTotals(); }
+    function removeRow(rid) {
+      const tbody = document.getElementById('rowsBody');
+      if (tbody.rows.length <= 1) { alert('At least one test is required.'); return; }
+      document.getElementById(rid).remove(); renumber(); calcTotals();
+    }
+    async function saveLabBill(e) {
+      e.preventDefault();
+      const patient_id = document.getElementById('patientId').value;
+      if (!patient_id) { alert('Please enter a valid Patient Code first.'); return; }
+      const items = [];
+      let valid = true;
+      document.querySelectorAll('#rowsBody tr').forEach(tr => {
+        const test_name = tr.querySelector('.test-name').value.trim();
+        const rate = parseFloat(tr.querySelector('.rate-input').value);
+        if (!test_name || isNaN(rate)) { valid = false; return; }
+        items.push({ test_name, rate });
+      });
+      if (!valid || !items.length) { alert('Fill test name + amount on every row.'); return; }
+      const payload = {
+        bill_date: document.getElementById('billDate').value,
+        patient_id,
+        referred_by_doctor_id: document.getElementById('referredBy').value || null,
+        invoice_no: document.getElementById('invoiceNo').value.trim(),
+        discount_percent: parseFloat(document.getElementById('discountPercent').value) || 0,
+        discount_amount: parseFloat(document.getElementById('discountAmount').value) || 0,
+        notes: document.getElementById('notes').value,
+        items
+      };
+      const r = await fetch('/api/labbill/save', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const j = await r.json();
+      if (j.success) location.href = `labbillprint.html?id=${j.data.lab_bill_id}`;
+      else alert(j.message);
+    }
+    init();
+  </script>
+</body>
+</html>

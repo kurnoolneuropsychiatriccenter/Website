@@ -4,131 +4,114 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bill Print - Asha Medicals</title>
+  <script src="js/auth.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body { background: #f3f4f6; }
-    .bill-sheet {
-      background: #ffffff;
-      color: #000000;
-      max-width: 960px;
-      margin: 24px auto;
-      padding: 28px 32px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-      font-family: 'Helvetica Neue', Arial, sans-serif;
+    body { background:#f3f4f6; font-family:'Helvetica Neue',Arial,sans-serif; }
+    .sheet {
+      background:#fff; color:#000;
+      width: 148mm;                 /* A5 portrait = half A4 */
+      min-height: 210mm;
+      margin: 20px auto;
+      padding: 8mm 10mm;
+      box-shadow:0 4px 16px rgba(0,0,0,0.08);
+      font-size: 11px;
     }
-    .bill-sheet h1 {
-      text-align: center;
-      font-size: 28px;
-      font-weight: 800;
-      letter-spacing: 1px;
+    .h-title { text-align:center; font-size:20px; font-weight:800; letter-spacing:0.6px; }
+    .h-sub   { text-align:center; font-size:10px; margin-top:3px; color:#333; line-height:1.3; }
+    .h-phone { text-align:center; font-size:10px; color:#333; }
+    .h-gst   { text-align:center; font-size:10px; color:#333; margin-top:2px; }
+    .divider { border-bottom:1.4px solid #000; margin:6px 0 8px; }
+    /* Compact meta: 3 columns fit patient details in one strip */
+    .meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 3px 14px;
+      margin-bottom: 8px;
+      font-size: 10.5px;
+      border-bottom: 1px dashed #d1d5db;
+      padding-bottom: 6px;
     }
-    .addr { text-align: center; font-size: 12px; margin-top: 4px; }
-    .phone { text-align: center; font-size: 12px; margin-top: 4px; }
-    .divider { border-bottom: 2px solid #000; margin: 14px 0 20px; }
-    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 24px; font-size: 13px; }
-    .meta .lbl { color: #444; font-size: 12px; }
-    .meta .val { border-bottom: 1px solid #999; min-height: 22px; padding: 2px 4px; margin-top: 2px; }
-    table.items { width: 100%; border-collapse: collapse; font-size: 12px; }
-    table.items thead th { text-align: left; padding: 8px 6px; border-top: 1px solid #000; border-bottom: 1px solid #000; font-weight: 700; }
-    table.items tbody td { padding: 10px 6px; border-bottom: 1px dashed #d1d5db; }
-    table.items td.num { text-align: right; }
-    .totals { margin-top: 18px; display: flex; justify-content: flex-end; }
-    .totals table { font-size: 13px; }
-    .totals td { padding: 4px 12px; }
-    .totals .lbl { text-align: right; color: #333; }
-    .totals .val { text-align: right; font-weight: 600; min-width: 90px; }
-    .totals .grand td { font-size: 15px; font-weight: 800; padding-top: 8px; }
-    .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 40px; font-size: 12px; }
-    .signature { border-top: 1px solid #000; padding-top: 4px; min-width: 180px; text-align: center; }
+    .meta .row { display:flex; }
+    .meta .lbl { color:#555; margin-right:4px; }
+    .meta .val { font-weight:600; color:#000; }
+    table.items { width:100%; border-collapse:collapse; font-size:10px; margin-top:2px; }
+    table.items thead th {
+      text-align:left; padding:4px 4px; border-top:1px solid #000; border-bottom:1px solid #000; font-weight:700;
+    }
+    table.items tbody td { padding:4px 4px; border-bottom:1px dashed #e5e7eb; vertical-align:top; }
+    table.items td.num { text-align:right; }
+    .totals { margin-top:8px; display:flex; justify-content:flex-end; }
+    .totals table { font-size:11px; width:180px; border-collapse:collapse; }
+    .totals td { padding:3px 6px; }
+    .totals .lbl { text-align:right; color:#333; }
+    .totals .val { text-align:right; font-weight:600; }
+    .totals .grand td { font-weight:800; font-size:12px; border-top:1px solid #000; padding-top:5px; }
+    .footer { display:flex; justify-content:space-between; align-items:flex-end; margin-top:14px; font-size:10px; }
+    .signature { border-top:1px solid #000; padding-top:2px; min-width:120px; text-align:center; }
+    .notes { margin-top:8px; font-size:9.5px; color:#555; line-height:1.3; }
 
     @media print {
-      body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .no-print { display: none !important; }
-      .bill-sheet { box-shadow: none; margin: 0; padding: 12mm 14mm; max-width: 100%; }
+      @page { size: A5 portrait; margin: 6mm; }
+      body { background:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      .no-print { display:none !important; }
+      .sheet { box-shadow:none; margin:0; padding:0; width:auto; min-height:auto; }
     }
   </style>
 </head>
 <body>
 
-  <div class="bill-sheet" id="billSheet" data-testid="medical-bill-print-container">
-    <h1>ASHA MEDICALS</h1>
-    <div class="addr">Shop no: 14, J.C.S. Complex, opposite New RTC busstand, beside GOPI HOTEL Spenser's Value Mart, lane, Sita Rama Nagar, Kurnool, Andhra Pradesh 518003</div>
-    <div class="phone">phone no : 91 91547 94360</div>
+  <div class="sheet" id="sheet" data-testid="medical-bill-print-container">
+    <div class="h-title">ASHA MEDICALS</div>
+    <div class="h-sub">Shop no: 14, J.C.S. Complex, opposite New RTC busstand, beside GOPI HOTEL Spenser's Value Mart, lane, Sita Rama Nagar, Kurnool, Andhra Pradesh 518003</div>
+    <div class="h-phone">phone no : 91 91547 94360</div>
+    <div class="h-gst" id="gstLine" style="display:none;">GST No: <span id="gstNo"></span></div>
     <div class="divider"></div>
 
-    <!-- Bill Meta -->
+    <!-- Compact patient/meta strip (3 columns) -->
     <div class="meta">
-      <div>
-        <div>
-          <div class="lbl">Patient Name:</div>
-          <div class="val" id="patientName">--</div>
-        </div>
-        <div class="mt-3">
-          <div class="lbl">Phone:</div>
-          <div class="val" id="patientPhone">--</div>
-        </div>
-        <div class="mt-3">
-          <div class="lbl">Referred By:</div>
-          <div class="val" id="referredBy">--</div>
-        </div>
-      </div>
-      <div>
-        <div>
-          <div class="lbl">Date:</div>
-          <div class="val" id="billDate">--</div>
-        </div>
-        <div class="mt-3">
-          <div class="lbl">Town:</div>
-          <div class="val" id="town">--</div>
-        </div>
-        <div class="mt-3">
-          <div class="lbl">Invoice No:</div>
-          <div class="val" id="invoiceNo">--</div>
-        </div>
-      </div>
+      <div class="row"><span class="lbl">Name:</span><span class="val" id="patientName">--</span></div>
+      <div class="row"><span class="lbl">Phone:</span><span class="val" id="patientPhone">--</span></div>
+      <div class="row"><span class="lbl">Date:</span><span class="val" id="billDate">--</span></div>
+      <div class="row"><span class="lbl">Ref. By:</span><span class="val" id="referredBy">--</span></div>
+      <div class="row"><span class="lbl">Town:</span><span class="val" id="town">--</span></div>
+      <div class="row"><span class="lbl">Invoice:</span><span class="val" id="invoiceNo">--</span></div>
     </div>
 
-    <!-- Items -->
     <table class="items" data-testid="print-items-table">
       <thead>
         <tr>
-          <th style="width: 34px;">S.No</th>
+          <th style="width:22px;">#</th>
           <th>Product</th>
           <th>Batch</th>
           <th>Exp</th>
           <th>HSN</th>
-          <th>MRP</th>
-          <th>Qty</th>
-          <th>Rate</th>
-          <th>SGST</th>
-          <th>CGST</th>
-          <th style="text-align: right;">Amount</th>
+          <th class="num">MRP</th>
+          <th class="num">Qty</th>
+          <th class="num">Rate</th>
+          <th class="num">SGST</th>
+          <th class="num">CGST</th>
+          <th class="num">Amount</th>
         </tr>
       </thead>
       <tbody id="itemsBody"></tbody>
     </table>
 
-    <!-- Totals -->
     <div class="totals">
       <table>
-        <tr>
-          <td class="lbl">Sub Total</td>
-          <td class="val" id="subtotal">0.00</td>
-        </tr>
-        <tr>
-          <td class="lbl">Discount</td>
-          <td class="val" id="discount">0.00</td>
-        </tr>
-        <tr class="grand">
-          <td class="lbl">Grand Total</td>
-          <td class="val" id="grandTotal">0.00</td>
-        </tr>
+        <tr><td class="lbl">Sub Total</td><td class="val" id="subtotal">0.00</td></tr>
+        <tr><td class="lbl">Discount</td><td class="val" id="discount">0.00</td></tr>
+        <tr class="grand"><td class="lbl">Grand Total</td><td class="val" id="grandTotal">0.00</td></tr>
       </table>
     </div>
 
+    <div class="notes">
+      <b>Note:</b> Medicine once sold cannot be returned.
+    </div>
+
     <div class="footer">
-      <div>Goods once sold cannot be returned.</div>
+      <div>Thank you. Get well soon.</div>
       <div class="signature">Signature</div>
     </div>
   </div>
@@ -144,58 +127,54 @@
   <script>
     function fmtDate(str) {
       if (!str) return '--';
-      // Accept YYYY-MM-DD, return DD/MM/YYYY (Indian format)
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(str);
-      if (m) return `${m[3]}/${m[2]}/${m[1]}`;
-      return str;
+      return m ? `${m[3]}/${m[2]}/${m[1]}` : str;
     }
-
-    async function loadBillPrint() {
-      const id = new URLSearchParams(window.location.search).get('id');
+    async function load() {
+      const id = new URLSearchParams(location.search).get('id');
       if (!id) { alert('Bill ID not provided'); return; }
 
+      // Load GST no (no-auth endpoint so print still works if session lapses)
       try {
-        const res = await fetch(`/api/medicalbill/print/${id}`);
-        const json = await res.json();
-        if (!json.success) { alert(json.message); return; }
+        const gj = await (await fetch('/api/public/gst')).json();
+        if (gj.success && gj.data.gst_number) {
+          document.getElementById('gstNo').textContent = gj.data.gst_number;
+          document.getElementById('gstLine').style.display = 'block';
+        }
+      } catch (e) {}
 
-        const b = json.data;
-        document.getElementById('patientName').innerText = b.patient_name_snapshot || b.patient_name || '--';
-        document.getElementById('patientPhone').innerText = b.patient_phone_snapshot || b.mobile || '--';
-        document.getElementById('referredBy').innerText = b.referred_by_name || '--';
-        document.getElementById('billDate').innerText = fmtDate(b.bill_date);
-        document.getElementById('town').innerText = b.town || '--';
-        document.getElementById('invoiceNo').innerText = b.invoice_no || b.bill_no || '--';
-
-        document.getElementById('subtotal').innerText = Number(b.subtotal || 0).toFixed(2);
-        document.getElementById('discount').innerText = Number(b.discount_amount || 0).toFixed(2);
-        document.getElementById('grandTotal').innerText = Number(b.grand_total || 0).toFixed(2);
-
-        const tbody = document.getElementById('itemsBody');
-        tbody.innerHTML = '';
-        (b.items || []).forEach((it, i) => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${i + 1}</td>
-            <td>${it.medicine_name || '--'}</td>
-            <td>${it.batch || '--'}</td>
-            <td>${it.expiry || '--'}</td>
-            <td>${it.hsn || '--'}</td>
-            <td class="num">${Number(it.mrp || 0).toFixed(2)}</td>
-            <td class="num">${it.qty}</td>
-            <td class="num">${Number(it.rate || 0).toFixed(2)}</td>
-            <td class="num">${Number(it.sgst_amount || 0).toFixed(2)}</td>
-            <td class="num">${Number(it.cgst_amount || 0).toFixed(2)}</td>
-            <td class="num">${Number(it.amount || 0).toFixed(2)}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-      } catch (err) {
-        console.error('Error loading bill print', err);
-        alert('Could not load the bill.');
-      }
+      const r = await fetch(`/api/medicalbill/print/${id}`);
+      const j = await r.json();
+      if (!j.success) { alert(j.message); return; }
+      const b = j.data;
+      document.getElementById('patientName').innerText = b.patient_name_snapshot || b.patient_name || '--';
+      document.getElementById('patientPhone').innerText = b.patient_phone_snapshot || b.mobile || '--';
+      document.getElementById('billDate').innerText = fmtDate(b.bill_date);
+      document.getElementById('referredBy').innerText = b.referred_by_name || '--';
+      document.getElementById('town').innerText = b.town || '--';
+      document.getElementById('invoiceNo').innerText = b.invoice_no || b.bill_no || '--';
+      document.getElementById('subtotal').innerText = Number(b.subtotal || 0).toFixed(2);
+      document.getElementById('discount').innerText = Number(b.discount_amount || 0).toFixed(2);
+      document.getElementById('grandTotal').innerText = Number(b.grand_total || 0).toFixed(2);
+      const tb = document.getElementById('itemsBody'); tb.innerHTML = '';
+      (b.items || []).forEach((it, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td>${it.medicine_name || '--'}</td>
+          <td>${it.batch || '--'}</td>
+          <td>${it.expiry || '--'}</td>
+          <td>${it.hsn || '--'}</td>
+          <td class="num">${Number(it.mrp || 0).toFixed(2)}</td>
+          <td class="num">${it.qty}</td>
+          <td class="num">${Number(it.rate || 0).toFixed(2)}</td>
+          <td class="num">${Number(it.sgst_amount || 0).toFixed(2)}</td>
+          <td class="num">${Number(it.cgst_amount || 0).toFixed(2)}</td>
+          <td class="num">${Number(it.amount || 0).toFixed(2)}</td>`;
+        tb.appendChild(tr);
+      });
     }
-    loadBillPrint();
+    load();
   </script>
 </body>
 </html>
