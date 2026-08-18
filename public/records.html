@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Records / PDF Reports</title>
+  <script src="js/auth.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff !important; }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md no-print">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Records / PDF Reports</h1>
+      </div>
+      <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6 max-w-6xl">
+
+    <div class="bg-white p-6 rounded-lg shadow mb-6 no-print">
+      <h2 class="text-lg font-bold mb-3"><i class="fa fa-filter mr-2 text-blue-600"></i> Report Filters</h2>
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
+        <div>
+          <label class="block text-xs font-medium mb-1">Report Type</label>
+          <select id="repType" class="w-full border px-3 py-2 rounded text-sm" onchange="onTypeChange()" data-testid="report-type">
+            <option value="op">OP Bills</option>
+            <option value="medical">Medical Bills</option>
+            <option value="lab">Lab Bills</option>
+            <option value="expenses">Expenses</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">Period</label>
+          <select id="period" class="w-full border px-3 py-2 rounded text-sm" onchange="onPeriodChange()" data-testid="report-period">
+            <option value="day">Day</option>
+            <option value="month">Month</option>
+            <option value="year">Year</option>
+            <option value="range">Custom Range</option>
+          </select>
+        </div>
+        <div id="dayBox"><label class="block text-xs font-medium mb-1">Date</label><input type="date" id="dayVal" class="w-full border px-3 py-2 rounded text-sm"></div>
+        <div id="monthBox" class="hidden"><label class="block text-xs font-medium mb-1">Month</label><input type="month" id="monthVal" class="w-full border px-3 py-2 rounded text-sm"></div>
+        <div id="yearBox" class="hidden"><label class="block text-xs font-medium mb-1">Year</label><input type="number" id="yearVal" min="2000" max="2099" class="w-full border px-3 py-2 rounded text-sm"></div>
+        <div id="rangeBox" class="hidden md:col-span-2"><label class="block text-xs font-medium mb-1">From / To</label><div class="flex gap-2"><input type="date" id="fromVal" class="border px-3 py-2 rounded text-sm w-full"><input type="date" id="toVal" class="border px-3 py-2 rounded text-sm w-full"></div></div>
+        <div>
+          <label class="block text-xs font-medium mb-1">Patient Code (optional)</label>
+          <input type="text" id="patientCode" placeholder="e.g. KNC001000001" class="w-full border px-3 py-2 rounded text-sm uppercase" data-testid="patient-code-filter">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button onclick="load()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="generate-btn"><i class="fa fa-search mr-1"></i> Generate</button>
+        <button onclick="window.print()" id="pdfBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium hidden" data-testid="pdf-btn"><i class="fa fa-file-pdf mr-1"></i> Print / Save as PDF</button>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">Tip: In the print dialog, choose <b>Save as PDF</b> as the printer to download the report as a PDF file.</p>
+    </div>
+
+    <!-- Report content (printable) -->
+    <div id="reportSheet" class="bg-white p-6 rounded-lg shadow hidden" data-testid="report-sheet">
+      <div class="text-center mb-4 border-b pb-3">
+        <h1 class="text-2xl font-extrabold">Kurnool Neuro Psychiatric and ENT Center</h1>
+        <p class="text-sm text-gray-600">Shop No: 14, J.C.S. Complex, Opp New RTC Bus Stand, Kurnool</p>
+        <p id="reportHeading" class="mt-2 text-lg font-bold text-blue-700">-</p>
+        <p id="reportPeriod" class="text-xs text-gray-500">-</p>
+      </div>
+      <div id="reportBody"></div>
+      <div class="mt-6 text-right border-t pt-3">
+        <span class="text-sm text-gray-600">Total: </span>
+        <span id="reportTotal" class="text-2xl font-bold text-green-700">₹0.00</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function onTypeChange() { /* no-op */ }
+    function onPeriodChange() {
+      const p = document.getElementById('period').value;
+      ['dayBox','monthBox','yearBox','rangeBox'].forEach(id => document.getElementById(id).classList.add('hidden'));
+      if (p==='day') document.getElementById('dayBox').classList.remove('hidden');
+      if (p==='month') document.getElementById('monthBox').classList.remove('hidden');
+      if (p==='year') document.getElementById('yearBox').classList.remove('hidden');
+      if (p==='range') document.getElementById('rangeBox').classList.remove('hidden');
+    }
+    async function findPatientIdByCode() {
+      const c = document.getElementById('patientCode').value.trim();
+      if (!c) return '';
+      const j = await (await fetch(`/api/patients/code/${encodeURIComponent(c)}`)).json();
+      return j.success && j.data ? j.data.id : null;
+    }
+    async function load() {
+      const type = document.getElementById('repType').value;
+      const period = document.getElementById('period').value;
+      const q = new URLSearchParams({ type, period });
+      if (period === 'day')   q.set('date',  document.getElementById('dayVal').value  || new Date().toISOString().slice(0,10));
+      if (period === 'month') q.set('month', document.getElementById('monthVal').value|| new Date().toISOString().slice(0,7));
+      if (period === 'year')  q.set('year',  document.getElementById('yearVal').value || String(new Date().getFullYear()));
+      if (period === 'range') { q.set('from_date', document.getElementById('fromVal').value); q.set('to_date', document.getElementById('toVal').value); }
+      const pid = await findPatientIdByCode();
+      if (pid === null) { alert('Patient code not found'); return; }
+      if (pid) q.set('patient_id', pid);
+
+      const j = await (await fetch(`/api/records/detailed?${q.toString()}`)).json();
+      if (!j.success) { alert(j.message); return; }
+      renderReport(type, j.data);
+    }
+
+    function renderReport(type, data) {
+      const sheet = document.getElementById('reportSheet');
+      const body  = document.getElementById('reportBody');
+      const heading = { op:'OP Bills Report', medical:'Medical Bills Report', lab:'Lab Bills Report', expenses:'Expenses Report' }[type];
+      document.getElementById('reportHeading').innerText = heading;
+      document.getElementById('reportPeriod').innerText  = `${data.from}  to  ${data.to}   ·   ${data.rows.length} record(s)`;
+      document.getElementById('reportTotal').innerText   = '₹' + Number(data.total || 0).toFixed(2);
+      sheet.classList.remove('hidden');
+      document.getElementById('pdfBtn').classList.remove('hidden');
+
+      let html = '';
+      if (!data.rows.length) { html = '<p class="text-center text-gray-500 py-6">No records found.</p>'; body.innerHTML = html; return; }
+
+      if (type === 'op') {
+        html = `<table class="w-full text-sm border-collapse"><thead><tr class="border-b bg-gray-50"><th class="p-2 text-left">OP Bill</th><th class="p-2 text-left">Invoice</th><th class="p-2 text-left">Date</th><th class="p-2 text-left">Token</th><th class="p-2 text-left">Patient</th><th class="p-2 text-left">Mobile</th><th class="p-2 text-left">Doctor</th><th class="p-2 text-right">Fee (₹)</th><th class="p-2">Mode</th></tr></thead><tbody>`;
+        data.rows.forEach(r => {
+          html += `<tr class="border-b"><td class="p-2 font-semibold text-blue-700">${r.op_bill_id||''}</td><td class="p-2">${r.invoice_no||''}</td><td class="p-2">${r.bill_date}</td><td class="p-2">${r.token_number||''}</td><td class="p-2">${(r.patient_code?r.patient_code+' - ':'')}${r.patient_name||''}</td><td class="p-2">${r.mobile||''}</td><td class="p-2">${r.doctor_name||''}</td><td class="p-2 text-right">${Number(r.amount||0).toFixed(2)}</td><td class="p-2">${r.payment_mode||''}</td></tr>`;
+        });
+        html += '</tbody></table>';
+      } else if (type === 'medical' || type === 'lab') {
+        data.rows.forEach(b => {
+          html += `<div class="mb-6 border rounded p-3">
+            <div class="flex flex-wrap gap-4 items-center border-b pb-2 mb-2">
+              <span class="font-semibold text-blue-700">${b.bill_no}</span>
+              <span>Inv: <b>${b.invoice_no||'-'}</b></span>
+              <span>${b.bill_date}</span>
+              <span>${b.patient_code||''} - ${b.patient_name||b.patient_name_snapshot||''}</span>
+              <span>${b.mobile||b.patient_phone_snapshot||''}</span>
+              <span>Ref: ${b.referred_by_name||'-'}</span>
+              <span class="ml-auto font-bold text-green-700">₹${Number(b.grand_total||0).toFixed(2)}</span>
+            </div>`;
+          if (type === 'medical') {
+            html += `<table class="w-full text-xs border-collapse"><thead><tr class="bg-gray-50 border-b"><th class="p-1 text-left">Medicine</th><th class="p-1">Batch</th><th class="p-1">Exp</th><th class="p-1">HSN</th><th class="p-1 text-right">Qty</th><th class="p-1 text-right">MRP</th><th class="p-1 text-right">Tax</th><th class="p-1 text-right">Amount</th></tr></thead><tbody>`;
+            (b.items||[]).forEach(it => {
+              html += `<tr class="border-b"><td class="p-1">${it.medicine_name}</td><td class="p-1">${it.batch||''}</td><td class="p-1">${it.expiry||''}</td><td class="p-1">${it.hsn||''}</td><td class="p-1 text-right">${it.qty}</td><td class="p-1 text-right">${Number(it.mrp||0).toFixed(2)}</td><td class="p-1 text-right">${Number(it.tax_amount||0).toFixed(2)}</td><td class="p-1 text-right">${Number(it.amount||0).toFixed(2)}</td></tr>`;
+            });
+            html += '</tbody></table>';
+          } else {
+            html += `<table class="w-full text-xs border-collapse"><thead><tr class="bg-gray-50 border-b"><th class="p-1 text-left">Test</th><th class="p-1 text-right">Amount</th></tr></thead><tbody>`;
+            (b.items||[]).forEach(it => {
+              html += `<tr class="border-b"><td class="p-1">${it.test_name}</td><td class="p-1 text-right">${Number(it.amount||0).toFixed(2)}</td></tr>`;
+            });
+            html += '</tbody></table>';
+          }
+          html += `<div class="text-right text-xs mt-1 text-gray-500">Subtotal ₹${Number(b.subtotal||0).toFixed(2)} · Discount ₹${Number(b.discount_amount||0).toFixed(2)}${b.adjustment?' · Adjustment ₹'+Number(b.adjustment).toFixed(2):''}</div>`;
+          html += '</div>';
+        });
+      } else if (type === 'expenses') {
+        html = `<table class="w-full text-sm border-collapse"><thead><tr class="bg-gray-50 border-b"><th class="p-2 text-left">Date</th><th class="p-2 text-left">Used For</th><th class="p-2 text-right">Amount (₹)</th></tr></thead><tbody>`;
+        data.rows.forEach(r => { html += `<tr class="border-b"><td class="p-2">${r.expense_date}</td><td class="p-2">${r.description}</td><td class="p-2 text-right">${Number(r.amount).toFixed(2)}</td></tr>`; });
+        html += '</tbody></table>';
+      }
+      body.innerHTML = html;
+    }
+    document.getElementById('dayVal').value   = new Date().toISOString().slice(0,10);
+    document.getElementById('monthVal').value = new Date().toISOString().slice(0,7);
+    document.getElementById('yearVal').value  = new Date().getFullYear();
+  </script>
+</body>
+</html>

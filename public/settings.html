@@ -37,6 +37,20 @@
       <p id="gstMsg" class="text-xs mt-2"></p>
     </div>
 
+    <!-- Recovery + Backup -->
+    <div class="bg-yellow-50 rounded-lg shadow p-6 border-l-4 border-yellow-500">
+      <h2 class="text-lg font-bold text-gray-800 mb-3"><i class="fa fa-shield-halved mr-2 text-yellow-700"></i> Password Recovery &amp; Data Backup</h2>
+      <p class="text-sm text-gray-700 mb-3">
+        <b>Recovery Code:</b> <span id="recoveryCode" class="font-mono text-lg font-bold bg-yellow-100 border border-yellow-300 rounded px-2 py-0.5" data-testid="recovery-code">--------</span>
+        <button onclick="regenRecovery()" class="ml-2 text-xs text-blue-600 hover:underline" data-testid="regen-recovery-btn">Regenerate</button>
+      </p>
+      <p class="text-xs text-gray-600 mb-4">Write this code on paper and keep it safe. If you forget your login password, click "Forgot Password" on the login screen and enter this code to reveal your password.</p>
+
+      <p class="text-sm text-gray-700 mb-2"><b>Full Data Backup:</b></p>
+      <a href="/api/backup/download" class="inline-block bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="backup-btn"><i class="fa fa-download mr-1"></i> Download clinic.db (Full Backup)</a>
+      <p class="text-xs text-gray-600 mt-2">This single file contains ALL your data (patients, bills, medicines, purchases, expenses, staff, everything). Copy it to a pen drive or cloud folder every evening. To move to a new PC, install the software fresh and replace <code>clinic.db</code> with your backup.</p>
+    </div>
+
     <!-- Change Login Password -->
     <div class="bg-white rounded-lg shadow p-6">
       <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2"><i class="fa fa-key mr-2 text-green-600"></i> Change Login Password</h2>
@@ -87,7 +101,16 @@
     async function loadGst() {
       const r = await fetch('/api/settings');
       const j = await r.json();
-      if (j.success) document.getElementById('gstNumber').value = j.data.gst_number || '';
+      if (j.success) {
+        document.getElementById('gstNumber').value = j.data.gst_number || '';
+        document.getElementById('recoveryCode').textContent = j.data.recovery_code || '(not set)';
+      }
+    }
+    async function regenRecovery() {
+      if (!confirm('Generate a NEW recovery code? Your old code will stop working.')) return;
+      const j = await (await fetch('/api/auth/regenerate-recovery-code', { method: 'POST' })).json();
+      if (j.success) { document.getElementById('recoveryCode').textContent = j.data.recovery_code; alert('New Recovery Code: ' + j.data.recovery_code + '\nWrite it down.'); }
+      else alert(j.message);
     }
     async function saveGst() {
       const gst_number = document.getElementById('gstNumber').value.trim();

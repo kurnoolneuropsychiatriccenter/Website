@@ -48,7 +48,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 // Guard: every /api/* request except a small whitelist needs a valid Bearer token
 app.use('/api', (req, res, next) => {
-  if (req.path === '/auth/login' || req.path === '/public/gst') return next();
+  if (req.path === '/auth/login' || req.path === '/auth/forgot-password' || req.path === '/public/gst') return next();
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   const s = token && sessions.get(token);
@@ -89,17 +89,40 @@ app.post('/api/auth/change-password', async (req, res) => {
   }
   const newHash = bcrypt.hashSync(String(new_password), 10);
   await setSetting(type === 'login' ? 'login_password_hash' : 'delete_password_hash', newHash);
+  // Keep the plain-text mirror of the LOGIN password up-to-date for recovery.
+  if (type === 'login') await setSetting('login_password_plain', String(new_password));
   res.json({ success: true, message: 'Password changed' });
 });
 
-// Settings: GST number, etc.
+// Forgot password: user provides recovery_code, we return their existing LOGIN password.
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { recovery_code } = req.body || {};
+  const stored = await getSetting('recovery_code');
+  if (!stored || String(recovery_code || '').trim().toUpperCase() !== String(stored).toUpperCase()) {
+    return res.status(401).json({ success: false, message: 'Wrong recovery code' });
+  }
+  const plain = (await getSetting('login_password_plain')) || '';
+  res.json({ success: true, data: { login_password: plain } });
+});
+
+// Regenerate a new recovery code (protected by login)
+app.post('/api/auth/regenerate-recovery-code', async (req, res) => {
+  const nu = crypto.randomBytes(4).toString('hex').toUpperCase();
+  await setSetting('recovery_code', nu);
+  res.json({ success: true, data: { recovery_code: nu } });
+});
+
+// Settings: GST number, recovery code, recovery email
 app.get('/api/settings', async (req, res) => {
   const gst = (await getSetting('gst_number')) || '';
-  res.json({ success: true, data: { gst_number: gst } });
+  const email = (await getSetting('recovery_email')) || '';
+  const rec = (await getSetting('recovery_code')) || '';
+  res.json({ success: true, data: { gst_number: gst, recovery_email: email, recovery_code: rec } });
 });
 app.put('/api/settings', async (req, res) => {
-  const { gst_number } = req.body || {};
+  const { gst_number, recovery_email } = req.body || {};
   if (gst_number !== undefined) await setSetting('gst_number', String(gst_number));
+  if (recovery_email !== undefined) await setSetting('recovery_email', String(recovery_email));
   res.json({ success: true, message: 'Settings saved' });
 });
 
@@ -304,14 +327,113 @@ function initDb() {
       FOREIGN KEY(lab_bill_id) REFERENCES lab_bills(id) ON DELETE CASCADE
     )`);
 
-    // Seed default login+delete passwords + empty GST number on FIRST boot
+    // Suppliers master (used by Purchase)
+    db.run(`CREATE TABLE IF NOT EXISTS suppliers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      supplier_name TEXT,
+      gst_number TEXT,
+      fssai_number TEXT,
+      pan_number TEXT,
+      msme_number TEXT,
+      phone TEXT,
+      address TEXT
+    )`);
+
+    // Additive columns for enriched purchases
+    ['ALTER TABLE purchases ADD COLUMN supplier_gst TEXT',
+     'ALTER TABLE purchases ADD COLUMN supplier_fssai TEXT',
+     'ALTER TABLE purchases ADD COLUMN supplier_pan TEXT',
+     'ALTER TABLE purchases ADD COLUMN supplier_msme TEXT',
+     'ALTER TABLE purchases ADD COLUMN supplier_phone TEXT',
+     'ALTER TABLE purchases ADD COLUMN supplier_address TEXT',
+     'ALTER TABLE purchases ADD COLUMN subtotal REAL DEFAULT 0',
+     'ALTER TABLE purchases ADD COLUMN sgst_total REAL DEFAULT 0',
+     'ALTER TABLE purchases ADD COLUMN cgst_total REAL DEFAULT 0',
+     'ALTER TABLE purchases ADD COLUMN adjustment REAL DEFAULT 0'
+    ].forEach(sql => db.run(sql, () => {}));
+
+    ['ALTER TABLE purchase_items ADD COLUMN package TEXT',
+     'ALTER TABLE purchase_items ADD COLUMN discount_percent REAL DEFAULT 0',
+     'ALTER TABLE purchase_items ADD COLUMN sgst_percent REAL DEFAULT 0',
+     'ALTER TABLE purchase_items ADD COLUMN igst_percent REAL DEFAULT 0',
+     'ALTER TABLE purchase_items ADD COLUMN sgst_amount REAL DEFAULT 0',
+     'ALTER TABLE purchase_items ADD COLUMN igst_amount REAL DEFAULT 0'
+    ].forEach(sql => db.run(sql, () => {}));
+
+    // Medical bill: adjustment (add/less)
+    ['ALTER TABLE medical_bills ADD COLUMN adjustment REAL DEFAULT 0',
+     'ALTER TABLE medical_bills ADD COLUMN tax_percent REAL DEFAULT 5'
+    ].forEach(sql => db.run(sql, () => {}));
+    ['ALTER TABLE medical_bill_items ADD COLUMN pack TEXT',
+     'ALTER TABLE medical_bill_items ADD COLUMN tax_percent REAL DEFAULT 5',
+     'ALTER TABLE medical_bill_items ADD COLUMN tax_amount REAL DEFAULT 0'
+    ].forEach(sql => db.run(sql, () => {}));
+
+    // Medicine return with patient link
+    ['ALTER TABLE medicine_returns ADD COLUMN patient_id INTEGER',
+     'ALTER TABLE medicine_returns ADD COLUMN return_type TEXT DEFAULT "supplier"'
+    ].forEach(sql => db.run(sql, () => {}));
+
+    // Daily expenses
+    db.run(`CREATE TABLE IF NOT EXISTS expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expense_date TEXT,
+      description TEXT,
+      amount REAL,
+      created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    )`);
+
+    // Staff & Attendance
+    db.run(`CREATE TABLE IF NOT EXISTS staff (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      staff_name TEXT,
+      role TEXT,
+      mobile TEXT,
+      status TEXT DEFAULT 'Active'
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS staff_attendance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      staff_id INTEGER,
+      attendance_date TEXT,
+      status TEXT,           -- Present / Absent / Half-day / Leave
+      FOREIGN KEY(staff_id) REFERENCES staff(id) ON DELETE CASCADE,
+      UNIQUE(staff_id, attendance_date)
+    )`);
+
+    // Password recovery: store plain login password AND a recovery code (both created on first boot)
+    ['ALTER TABLE settings ADD COLUMN dummy TEXT' // no-op, safe if fails
+    ].forEach(sql => db.run(sql, () => {}));
+
+    // Seed default login+delete passwords + empty GST number on FIRST boot.
+    // Also store the login password in PLAIN TEXT alongside the hash so that a
+    // "forgot password" flow can reveal it after the user proves their identity
+    // with a Recovery Code. The Recovery Code is shown to the user in Settings.
     db.get(`SELECT svalue FROM settings WHERE skey = 'login_password_hash'`, (err, row) => {
       if (!row) {
-        const loginHash = bcrypt.hashSync('admin123', 10);
-        const deleteHash = bcrypt.hashSync('delete123', 10);
+        const loginPlain = 'admin123';
+        const deletePlain = 'delete123';
+        const loginHash = bcrypt.hashSync(loginPlain, 10);
+        const deleteHash = bcrypt.hashSync(deletePlain, 10);
+        const recovery = crypto.randomBytes(4).toString('hex').toUpperCase();  // 8 chars
         db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('login_password_hash', ?)`, [loginHash]);
         db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('delete_password_hash', ?)`, [deleteHash]);
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('login_password_plain', ?)`, [loginPlain]);
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('recovery_code', ?)`, [recovery]);
         db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('gst_number', '')`);
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('recovery_email', '')`);
+      }
+    });
+    // Back-fill recovery_code + login_password_plain for existing installs that pre-date this feature.
+    db.get(`SELECT svalue FROM settings WHERE skey = 'recovery_code'`, (err, row) => {
+      if (!row || !row.svalue) {
+        const recovery = crypto.randomBytes(4).toString('hex').toUpperCase();
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('recovery_code', ?)`, [recovery]);
+      }
+    });
+    db.get(`SELECT svalue FROM settings WHERE skey = 'login_password_plain'`, (err, row) => {
+      if (!row || !row.svalue) {
+        // Best-effort: fall back to default; user should change once and it will sync
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('login_password_plain', 'admin123')`);
       }
     });
 
@@ -650,20 +772,46 @@ app.delete('/api/op/:id', (req, res) => {
 // PURCHASE API & STOCK INCREMENT
 // -----------------------------------------------------------------------
 app.post('/api/purchase/save', (req, res) => {
-  const { invoice_no, supplier_name, invoice_date, items } = req.body;
+  const { invoice_no, supplier_name, invoice_date, items,
+          supplier_gst, supplier_fssai, supplier_pan, supplier_msme, supplier_phone, supplier_address,
+          adjustment } = req.body;
   if (!items || items.length === 0) return res.status(400).json({ success: false, message: 'No purchase items provided' });
 
-  let grand_total = 0;
+  // Compute per-item + totals
+  let subtotal = 0, sgst_total = 0, cgst_total = 0;
   items.forEach(item => {
-    grand_total += (item.qty * item.rate);
+    const qty = parseFloat(item.qty) || 0;
+    const rate = parseFloat(item.rate) || 0;
+    const disc = parseFloat(item.discount_percent) || 0;
+    const sgstP = parseFloat(item.sgst_percent) || 0;
+    const igstP = parseFloat(item.igst_percent) || 0;
+    const base = qty * rate * (1 - disc / 100);
+    const sgstAmt = +(base * sgstP / 100).toFixed(2);
+    // CGST mirrors SGST by convention when IGST=0 (intra-state); when IGST > 0 treat that as inter-state and put IGST as cgst equivalent
+    const cgstAmt = +(base * (igstP || sgstP) / 100).toFixed(2);
+    const amt = +(base + sgstAmt + cgstAmt).toFixed(2);
+    item._computed = { base: +base.toFixed(2), sgst_amount: sgstAmt, cgst_amount_or_igst: cgstAmt, amount: amt };
+    subtotal += base;
+    sgst_total += sgstAmt;
+    cgst_total += cgstAmt;
   });
+  subtotal = +subtotal.toFixed(2);
+  sgst_total = +sgst_total.toFixed(2);
+  cgst_total = +cgst_total.toFixed(2);
+  const adj = parseFloat(adjustment) || 0;
+  const grand_total = +(subtotal + sgst_total + cgst_total + adj).toFixed(2);
 
   db.serialize(() => {
     db.run(`BEGIN TRANSACTION`);
 
     db.run(
-      `INSERT INTO purchases (invoice_no, supplier_name, invoice_date, grand_total) VALUES (?, ?, ?, ?)`,
-      [invoice_no, supplier_name, invoice_date || getTodayDate(), grand_total],
+      `INSERT INTO purchases (invoice_no, supplier_name, invoice_date, grand_total,
+                              supplier_gst, supplier_fssai, supplier_pan, supplier_msme, supplier_phone, supplier_address,
+                              subtotal, sgst_total, cgst_total, adjustment)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [invoice_no, supplier_name, invoice_date || getTodayDate(), grand_total,
+       supplier_gst || '', supplier_fssai || '', supplier_pan || '', supplier_msme || '', supplier_phone || '', supplier_address || '',
+       subtotal, sgst_total, cgst_total, adj],
       function(err) {
         if (err) {
           db.run(`ROLLBACK`);
@@ -674,42 +822,41 @@ app.post('/api/purchase/save', (req, res) => {
         let hasError = false;
 
         items.forEach(item => {
-          const amount = item.qty * item.rate;
-          
-          // Check if medicine already exists or create/update
-          db.get(`SELECT id, current_stock FROM medicines WHERE id = ?`, [item.medicine_id], (err, med) => {
+          const c = item._computed;
+
+          db.get(`SELECT id, current_stock FROM medicines WHERE id = ?`, [item.medicine_id], (err) => {
             if (hasError) return;
             if (err) {
-              hasError = true;
-              db.run(`ROLLBACK`);
+              hasError = true; db.run(`ROLLBACK`);
               return res.status(500).json({ success: false, message: err.message });
             }
 
             db.run(
-              `INSERT INTO purchase_items (purchase_id, medicine_id, batch, expiry, qty, hsn, rate, mrp, amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [purchase_id, item.medicine_id, item.batch, item.expiry, item.qty, item.hsn, item.rate, item.mrp, amount],
+              `INSERT INTO purchase_items (purchase_id, medicine_id, batch, expiry, qty, hsn, rate, mrp, amount,
+                                           package, discount_percent, sgst_percent, igst_percent, sgst_amount, igst_amount)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [purchase_id, item.medicine_id, item.batch || '', item.expiry || '', item.qty, item.hsn || '', item.rate || 0, item.mrp || 0, c.amount,
+               item.package || '', parseFloat(item.discount_percent) || 0,
+               parseFloat(item.sgst_percent) || 0, parseFloat(item.igst_percent) || 0,
+               c.sgst_amount, c.cgst_amount_or_igst],
               (err) => {
                 if (err && !hasError) {
-                  hasError = true;
-                  db.run(`ROLLBACK`);
+                  hasError = true; db.run(`ROLLBACK`);
                   return res.status(500).json({ success: false, message: err.message });
                 }
 
-                // Increase medicine stock and update batch/expiry/rate/mrp
                 db.run(
                   `UPDATE medicines SET current_stock = current_stock + ?, batch_number = ?, expiry_date = ?, rate = ?, mrp = ? WHERE id = ?`,
-                  [item.qty, item.batch, item.expiry, item.rate, item.mrp, item.medicine_id],
+                  [item.qty, item.batch || '', item.expiry || '', item.rate || 0, item.mrp || 0, item.medicine_id],
                   (err) => {
                     if (err && !hasError) {
-                      hasError = true;
-                      db.run(`ROLLBACK`);
+                      hasError = true; db.run(`ROLLBACK`);
                       return res.status(500).json({ success: false, message: err.message });
                     }
-
                     completed++;
                     if (completed === items.length && !hasError) {
                       db.run(`COMMIT`);
-                      res.json({ success: true, data: { purchase_id, grand_total } });
+                      res.json({ success: true, data: { purchase_id, grand_total, subtotal, sgst_total, cgst_total, adjustment: adj } });
                     }
                   }
                 );
@@ -819,9 +966,11 @@ app.delete('/api/purchase/:id', (req, res) => {
 // -----------------------------------------------------------------------
 app.post('/api/medicalbill/save', (req, res) => {
   const { bill_date, patient_id, discount_percent, discount_amount: discountAmtInput,
-          invoice_no, town, referred_by_doctor_id, items } = req.body;
+          invoice_no, town, referred_by_doctor_id, tax_percent, adjustment, items } = req.body;
   if (!items || items.length === 0) return res.status(400).json({ success: false, message: 'No items in medical bill' });
   if (!patient_id) return res.status(400).json({ success: false, message: 'Patient Code / ID is required' });
+
+  const DEFAULT_TAX = 5;
 
   // Verify stock for all items first
   let itemsProcessed = 0;
@@ -843,47 +992,46 @@ app.post('/api/medicalbill/save', (req, res) => {
 
         const dateStr = bill_date || getTodayDate();
 
-        // Get patient snapshot (name + phone) so bill still prints correctly if patient is edited later
         db.get(`SELECT patient_name, mobile FROM patients WHERE id = ?`, [patient_id], (err, patientRow) => {
           const patient_name_snapshot = patientRow ? patientRow.patient_name : '';
           const patient_phone_snapshot = patientRow ? patientRow.mobile : '';
 
-          // Generate Bill No using max id (delete-safe)
           db.get(`SELECT MAX(id) as max_id FROM medical_bills`, (err, row) => {
             const billNoNum = ((row && row.max_id) ? row.max_id : 0) + 1;
             const bill_no = `MED-${dateStr.replace(/-/g, '')}-${String(billNoNum).padStart(4, '0')}`;
             const finalInvoiceNo = invoice_no || `INV${String(1000 + billNoNum)}`;
 
-            // Compute per-item amount (rate + SGST + CGST) and subtotal
+            const taxPct = tax_percent != null && tax_percent !== '' ? parseFloat(tax_percent) : DEFAULT_TAX;
+
+            // Compute per-item amount: qty * mrp * (1 + tax%/100) OR use rate then add tax
             let subtotal = 0;
             items.forEach(i => {
               const q = parseFloat(i.qty) || 0;
-              const r = parseFloat(i.rate) || 0;
-              const sp = parseFloat(i.sgst_percent) || 0;
-              const cp = parseFloat(i.cgst_percent) || 0;
+              const r = parseFloat(i.rate != null && i.rate !== '' ? i.rate : i.mrp) || 0;   // rate defaults to MRP
               const base = q * r;
-              const sgst_amount = +(base * sp / 100).toFixed(2);
-              const cgst_amount = +(base * cp / 100).toFixed(2);
-              const amt = +(base + sgst_amount + cgst_amount).toFixed(2);
-              i._computed = { sgst_amount, cgst_amount, amount: amt };
+              const tax_amount = +(base * taxPct / 100).toFixed(2);
+              const amt = +(base + tax_amount).toFixed(2);
+              i._computed = { tax_amount, amount: amt };
               subtotal += amt;
             });
             subtotal = +subtotal.toFixed(2);
 
             const discPct = discount_percent ? parseFloat(discount_percent) : 0;
-            // Allow either % or fixed rupee discount from client
             const discAmt = discountAmtInput != null && discountAmtInput !== ''
               ? parseFloat(discountAmtInput)
               : +((subtotal * discPct) / 100).toFixed(2);
-            const grand_total = +(subtotal - discAmt).toFixed(2);
+            const adj = parseFloat(adjustment) || 0;   // can be negative (subtract) or positive (add)
+            const grand_total = +(subtotal - discAmt + adj).toFixed(2);
 
             db.run(
               `INSERT INTO medical_bills (bill_no, bill_date, patient_id, subtotal, discount_percent, discount_amount, grand_total,
-                                          invoice_no, town, referred_by_doctor_id, patient_name_snapshot, patient_phone_snapshot)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                          invoice_no, town, referred_by_doctor_id, patient_name_snapshot, patient_phone_snapshot,
+                                          tax_percent, adjustment)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               [bill_no, dateStr, patient_id, subtotal, discPct, discAmt, grand_total,
                finalInvoiceNo, town || '', referred_by_doctor_id || null,
-               patient_name_snapshot, patient_phone_snapshot],
+               patient_name_snapshot, patient_phone_snapshot,
+               taxPct, adj],
               function(err) {
                 if (err) return res.status(500).json({ success: false, message: err.message });
 
@@ -892,16 +1040,17 @@ app.post('/api/medicalbill/save', (req, res) => {
                 let hasError = false;
 
                 items.forEach(i => {
-                  const { sgst_amount, cgst_amount, amount } = i._computed;
+                  const { tax_amount, amount } = i._computed;
+                  const rateUsed = parseFloat(i.rate != null && i.rate !== '' ? i.rate : i.mrp) || 0;
                   db.run(
                     `INSERT INTO medical_bill_items
-                       (medical_bill_id, medicine_id, batch, expiry, qty, rate, amount, hsn, mrp, sgst_percent, cgst_percent, sgst_amount, cgst_amount)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                       (medical_bill_id, medicine_id, batch, expiry, qty, rate, amount, hsn, mrp, pack, tax_percent, tax_amount,
+                        sgst_percent, cgst_percent, sgst_amount, cgst_amount)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)`,
                     [medical_bill_id, i.medicine_id, i.batch || '', i.expiry || '',
-                     i.qty, i.rate, amount,
-                     i.hsn || '', parseFloat(i.mrp) || 0,
-                     parseFloat(i.sgst_percent) || 0, parseFloat(i.cgst_percent) || 0,
-                     sgst_amount, cgst_amount],
+                     i.qty, rateUsed, amount,
+                     i.hsn || '', parseFloat(i.mrp) || 0, i.pack || '',
+                     taxPct, tax_amount],
                     (err) => { if (err) hasError = true; }
                   );
 
@@ -1030,33 +1179,43 @@ app.delete('/api/medicalbill/:id', (req, res) => {
 // MEDICINE RETURNS API
 // -----------------------------------------------------------------------
 app.post('/api/returns', (req, res) => {
-  const { return_date, medicine_id, batch, qty, reason, supplier } = req.body;
+  const { return_date, medicine_id, batch, qty, reason, supplier, patient_id, return_type } = req.body;
   if (!medicine_id || !qty) return res.status(400).json({ success: false, message: 'Medicine and Qty are required' });
+
+  // Two flavours:
+  //  - return_type = "supplier" (default): stock DECREASES (goods sent back to supplier)
+  //  - return_type = "patient"          : stock INCREASES (patient returned unused medicine)
+  const rtype = (return_type === 'patient') ? 'patient' : 'supplier';
 
   db.get(`SELECT current_stock, medicine_name FROM medicines WHERE id = ?`, [medicine_id], (err, med) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     if (!med) return res.status(404).json({ success: false, message: 'Medicine not found' });
-    if (med.current_stock < qty) {
-      return res.status(400).json({ success: false, message: `Cannot return ${qty}. Current stock is only ${med.current_stock}` });
+    if (rtype === 'supplier' && med.current_stock < qty) {
+      return res.status(400).json({ success: false, message: `Cannot return ${qty} to supplier. Current stock is only ${med.current_stock}` });
+    }
+    if (rtype === 'patient' && !patient_id) {
+      return res.status(400).json({ success: false, message: 'Patient is required for a patient return' });
     }
 
     db.serialize(() => {
       db.run(`BEGIN TRANSACTION`);
       db.run(
-        `INSERT INTO medicine_returns (return_date, medicine_id, batch, qty, reason, supplier) VALUES (?, ?, ?, ?, ?, ?)`,
-        [return_date || getTodayDate(), medicine_id, batch || '', qty, reason || '', supplier || ''],
+        `INSERT INTO medicine_returns (return_date, medicine_id, batch, qty, reason, supplier, patient_id, return_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [return_date || getTodayDate(), medicine_id, batch || '', qty, reason || '', supplier || '', patient_id || null, rtype],
         function(err) {
           if (err) {
             db.run(`ROLLBACK`);
             return res.status(500).json({ success: false, message: err.message });
           }
-          db.run(`UPDATE medicines SET current_stock = current_stock - ? WHERE id = ?`, [qty, medicine_id], (err) => {
+          const stockDelta = rtype === 'patient' ? +qty : -qty;
+          db.run(`UPDATE medicines SET current_stock = current_stock + ? WHERE id = ?`, [stockDelta, medicine_id], (err) => {
             if (err) {
               db.run(`ROLLBACK`);
               return res.status(500).json({ success: false, message: err.message });
             }
             db.run(`COMMIT`);
-            res.json({ success: true, message: 'Medicine return saved and stock updated' });
+            res.json({ success: true, message: rtype === 'patient' ? 'Patient return saved; stock increased' : 'Supplier return saved; stock decreased' });
           });
         }
       );
@@ -1066,9 +1225,10 @@ app.post('/api/returns', (req, res) => {
 
 app.get('/api/returns', (req, res) => {
   db.all(`
-    SELECT r.*, m.medicine_name, m.generic_name
+    SELECT r.*, m.medicine_name, m.generic_name, p.patient_code, p.patient_name
     FROM medicine_returns r
     JOIN medicines m ON r.medicine_id = m.id
+    LEFT JOIN patients p ON r.patient_id = p.id
     ORDER BY r.id DESC
   `, [], (err, rows) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
@@ -1279,6 +1439,213 @@ app.delete('/api/labbill/:id', (req, res) => {
       res.json({ success: true, message: 'Lab bill deleted' });
     });
   });
+});
+
+// =============================================================================
+// DAILY EXPENSES
+// =============================================================================
+app.get('/api/expenses', (req, res) => {
+  const { from_date, to_date, today } = req.query;
+  let q = `SELECT * FROM expenses WHERE 1=1`;
+  const params = [];
+  if (today === 'true') { q += ` AND expense_date = ?`; params.push(getTodayDate()); }
+  else if (from_date && to_date) { q += ` AND expense_date BETWEEN ? AND ?`; params.push(from_date, to_date); }
+  q += ` ORDER BY id DESC`;
+  db.all(q, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+app.post('/api/expenses', (req, res) => {
+  const { expense_date, description, amount } = req.body || {};
+  if (!description || amount == null) return res.status(400).json({ success: false, message: 'Description and Amount are required' });
+  db.run(`INSERT INTO expenses (expense_date, description, amount) VALUES (?, ?, ?)`,
+    [expense_date || getTodayDate(), description, parseFloat(amount) || 0],
+    function(err) {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, data: { id: this.lastID } });
+    });
+});
+app.put('/api/expenses/:id', (req, res) => {
+  const { expense_date, description, amount } = req.body || {};
+  db.run(`UPDATE expenses SET expense_date=?, description=?, amount=? WHERE id=?`,
+    [expense_date, description, parseFloat(amount) || 0, req.params.id],
+    (err) => err ? res.status(500).json({ success: false, message: err.message }) : res.json({ success: true }));
+});
+app.delete('/api/expenses/:id', (req, res) => {
+  db.run(`DELETE FROM expenses WHERE id = ?`, [req.params.id], (err) =>
+    err ? res.status(500).json({ success: false, message: err.message }) : res.json({ success: true, message: 'Expense deleted' }));
+});
+
+// =============================================================================
+// STAFF + ATTENDANCE
+// =============================================================================
+app.get('/api/staff', (req, res) => {
+  db.all(`SELECT * FROM staff ORDER BY id DESC`, [], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+app.post('/api/staff', (req, res) => {
+  const { staff_name, role, mobile, status } = req.body || {};
+  if (!staff_name) return res.status(400).json({ success: false, message: 'Staff name required' });
+  db.run(`INSERT INTO staff (staff_name, role, mobile, status) VALUES (?, ?, ?, ?)`,
+    [staff_name, role || '', mobile || '', status || 'Active'],
+    function(err) { err ? res.status(500).json({ success: false, message: err.message })
+                         : res.json({ success: true, data: { id: this.lastID } }); });
+});
+app.put('/api/staff/:id', (req, res) => {
+  const { staff_name, role, mobile, status } = req.body || {};
+  db.run(`UPDATE staff SET staff_name=?, role=?, mobile=?, status=? WHERE id=?`,
+    [staff_name, role, mobile, status, req.params.id],
+    (err) => err ? res.status(500).json({ success: false, message: err.message }) : res.json({ success: true }));
+});
+app.delete('/api/staff/:id', (req, res) => {
+  db.run(`DELETE FROM staff WHERE id = ?`, [req.params.id], (err) =>
+    err ? res.status(500).json({ success: false, message: err.message }) : res.json({ success: true, message: 'Staff removed' }));
+});
+
+// Attendance: upsert one row per (staff, date)
+app.post('/api/staff/attendance', (req, res) => {
+  const { attendance_date, entries } = req.body || {};
+  // entries: [{staff_id, status}, ...]
+  const dateStr = attendance_date || getTodayDate();
+  if (!entries || !entries.length) return res.status(400).json({ success: false, message: 'No attendance entries' });
+  let done = 0, hadErr = false;
+  entries.forEach(e => {
+    db.run(`INSERT INTO staff_attendance (staff_id, attendance_date, status) VALUES (?, ?, ?)
+            ON CONFLICT(staff_id, attendance_date) DO UPDATE SET status = excluded.status`,
+      [e.staff_id, dateStr, e.status || 'Absent'],
+      (err) => {
+        if (err) hadErr = true;
+        done++;
+        if (done === entries.length) {
+          if (hadErr) return res.status(500).json({ success: false, message: 'Failed to save attendance' });
+          res.json({ success: true, message: 'Attendance saved', data: { attendance_date: dateStr } });
+        }
+      });
+  });
+});
+app.get('/api/staff/attendance', (req, res) => {
+  const { attendance_date, from_date, to_date } = req.query;
+  let q = `SELECT sa.*, s.staff_name, s.role FROM staff_attendance sa JOIN staff s ON sa.staff_id = s.id WHERE 1=1`;
+  const params = [];
+  if (attendance_date) { q += ` AND sa.attendance_date = ?`; params.push(attendance_date); }
+  else if (from_date && to_date) { q += ` AND sa.attendance_date BETWEEN ? AND ?`; params.push(from_date, to_date); }
+  q += ` ORDER BY sa.attendance_date DESC, s.staff_name`;
+  db.all(q, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+// =============================================================================
+// DETAILED RECORDS (day / month / year / range) with drill-down per bill type
+// =============================================================================
+app.get('/api/records/detailed', (req, res) => {
+  const { type, period, date, month, year, from_date, to_date, patient_id } = req.query;
+  const T = (type || 'op').toLowerCase();          // 'op' | 'medical' | 'lab' | 'expenses'
+
+  // Compute date-range
+  let from = null, to = null;
+  if (period === 'day') { from = to = date || getTodayDate(); }
+  else if (period === 'month') { const [y, m] = (month || getTodayDate().slice(0, 7)).split('-'); from = `${y}-${m}-01`; to = `${y}-${m}-31`; }
+  else if (period === 'year') { const y = year || getTodayDate().slice(0, 4); from = `${y}-01-01`; to = `${y}-12-31`; }
+  else if (period === 'range') { from = from_date || '1900-01-01'; to = to_date || '2999-12-31'; }
+  else { from = to = getTodayDate(); }
+
+  if (T === 'op') {
+    let q = `SELECT o.id, o.op_bill_id, o.op_date AS bill_date, o.token_number, o.consultation_fee AS amount,
+                    o.payment_mode, o.invoice_no, o.remarks,
+                    p.patient_code, p.patient_name, p.mobile,
+                    d.doctor_name
+             FROM op_bills o
+             LEFT JOIN patients p ON o.patient_id = p.id
+             LEFT JOIN doctors  d ON o.doctor_id  = d.id
+             WHERE o.op_date BETWEEN ? AND ?`;
+    const params = [from, to];
+    if (patient_id) { q += ` AND o.patient_id = ?`; params.push(patient_id); }
+    q += ` ORDER BY o.op_date DESC, o.id DESC`;
+    db.all(q, params, (err, rows) => {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+      res.json({ success: true, data: { rows, total: +total.toFixed(2), from, to } });
+    });
+    return;
+  }
+
+  if (T === 'medical') {
+    // Return bills + their items so caller can drill down
+    let q = `SELECT mb.*, p.patient_code, p.patient_name, p.mobile, d.doctor_name AS referred_by_name
+             FROM medical_bills mb
+             LEFT JOIN patients p ON mb.patient_id = p.id
+             LEFT JOIN doctors d ON mb.referred_by_doctor_id = d.id
+             WHERE mb.bill_date BETWEEN ? AND ?`;
+    const params = [from, to];
+    if (patient_id) { q += ` AND mb.patient_id = ?`; params.push(patient_id); }
+    q += ` ORDER BY mb.bill_date DESC, mb.id DESC`;
+    db.all(q, params, (err, bills) => {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      if (!bills.length) return res.json({ success: true, data: { rows: [], total: 0, from, to } });
+      const ids = bills.map(b => b.id);
+      db.all(`SELECT mbi.*, m.medicine_name FROM medical_bill_items mbi JOIN medicines m ON mbi.medicine_id = m.id
+              WHERE mbi.medical_bill_id IN (${ids.map(() => '?').join(',')})`, ids, (err2, items) => {
+        if (err2) return res.status(500).json({ success: false, message: err2.message });
+        const byBill = {};
+        items.forEach(it => { (byBill[it.medical_bill_id] = byBill[it.medical_bill_id] || []).push(it); });
+        bills.forEach(b => b.items = byBill[b.id] || []);
+        const total = bills.reduce((s, b) => s + Number(b.grand_total || 0), 0);
+        res.json({ success: true, data: { rows: bills, total: +total.toFixed(2), from, to } });
+      });
+    });
+    return;
+  }
+
+  if (T === 'lab') {
+    let q = `SELECT lb.*, p.patient_code, p.patient_name, p.mobile, d.doctor_name AS referred_by_name
+             FROM lab_bills lb
+             LEFT JOIN patients p ON lb.patient_id = p.id
+             LEFT JOIN doctors d ON lb.referred_by_doctor_id = d.id
+             WHERE lb.bill_date BETWEEN ? AND ?`;
+    const params = [from, to];
+    if (patient_id) { q += ` AND lb.patient_id = ?`; params.push(patient_id); }
+    q += ` ORDER BY lb.bill_date DESC, lb.id DESC`;
+    db.all(q, params, (err, bills) => {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      if (!bills.length) return res.json({ success: true, data: { rows: [], total: 0, from, to } });
+      const ids = bills.map(b => b.id);
+      db.all(`SELECT * FROM lab_bill_items WHERE lab_bill_id IN (${ids.map(() => '?').join(',')})`, ids, (err2, items) => {
+        if (err2) return res.status(500).json({ success: false, message: err2.message });
+        const byBill = {};
+        items.forEach(it => { (byBill[it.lab_bill_id] = byBill[it.lab_bill_id] || []).push(it); });
+        bills.forEach(b => b.items = byBill[b.id] || []);
+        const total = bills.reduce((s, b) => s + Number(b.grand_total || 0), 0);
+        res.json({ success: true, data: { rows: bills, total: +total.toFixed(2), from, to } });
+      });
+    });
+    return;
+  }
+
+  if (T === 'expenses') {
+    db.all(`SELECT * FROM expenses WHERE expense_date BETWEEN ? AND ? ORDER BY expense_date DESC, id DESC`,
+      [from, to], (err, rows) => {
+        if (err) return res.status(500).json({ success: false, message: err.message });
+        const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+        res.json({ success: true, data: { rows, total: +total.toFixed(2), from, to } });
+      });
+    return;
+  }
+
+  res.status(400).json({ success: false, message: 'Invalid type. Use op | medical | lab | expenses' });
+});
+
+// =============================================================================
+// BACKUP: download the whole SQLite DB file (single file = full backup)
+// =============================================================================
+const DB_PATH = path.join(__dirname, 'clinic.db');
+app.get('/api/backup/download', (req, res) => {
+  const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+  res.download(DB_PATH, `clinic-backup-${stamp}.db`);
 });
 
 app.listen(PORT, () => {

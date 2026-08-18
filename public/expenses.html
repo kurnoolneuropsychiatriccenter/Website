@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Expenses</title>
+  <script src="js/auth.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Daily Expenses</h1>
+      </div>
+      <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6 max-w-5xl">
+    <div class="bg-white p-6 rounded-lg shadow mb-6">
+      <h2 class="text-lg font-bold mb-4"><i class="fa fa-plus mr-2 text-green-600"></i> Add Expense</h2>
+      <form onsubmit="save(event)" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <input type="date" id="expDate" required class="border px-3 py-2 rounded text-sm" data-testid="expense-date-input">
+        <input type="text" id="expDesc" required placeholder="Used For (e.g. Electricity)" class="md:col-span-2 border px-3 py-2 rounded text-sm" data-testid="expense-desc-input">
+        <input type="number" id="expAmt" required step="0.01" min="0" placeholder="Amount ₹" class="border px-3 py-2 rounded text-sm" data-testid="expense-amount-input">
+        <button type="submit" class="md:col-span-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="save-expense-btn"><i class="fa fa-save mr-1"></i> Save Expense</button>
+      </form>
+    </div>
+
+    <div class="bg-white p-4 rounded-lg shadow mb-4 flex flex-wrap gap-3 items-center">
+      <label class="text-sm"><input type="checkbox" id="todayFilter" checked onchange="load()" data-testid="today-filter"> Today only</label>
+      <input type="date" id="fromDate" class="border px-3 py-1.5 rounded text-sm">
+      <input type="date" id="toDate" class="border px-3 py-1.5 rounded text-sm">
+      <button onclick="load()" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700" data-testid="filter-btn">Apply</button>
+      <span class="ml-auto text-sm">Total: <span id="total" class="font-bold text-red-600">₹0.00</span></span>
+    </div>
+
+    <div class="bg-white rounded-lg shadow overflow-x-auto">
+      <table class="w-full text-left" data-testid="expenses-table">
+        <thead><tr class="bg-blue-50 text-blue-900 border-b text-sm"><th class="p-3">Date</th><th class="p-3">Description</th><th class="p-3 text-right">Amount (₹)</th><th class="p-3 text-center">Actions</th></tr></thead>
+        <tbody id="body" class="divide-y text-sm"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('expDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('fromDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('toDate').value = new Date().toISOString().split('T')[0];
+
+    async function save(e) {
+      e.preventDefault();
+      const payload = { expense_date: document.getElementById('expDate').value,
+        description: document.getElementById('expDesc').value.trim(),
+        amount: parseFloat(document.getElementById('expAmt').value) || 0 };
+      const r = await (await fetch('/api/expenses', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})).json();
+      if (r.success) { document.getElementById('expDesc').value=''; document.getElementById('expAmt').value=''; load(); }
+      else alert(r.message);
+    }
+    async function del(id) {
+      if (!confirm('Delete this expense?')) return;
+      const r = await (await fetch(`/api/expenses/${id}`, {method:'DELETE'})).json();
+      if (r.success) load(); else alert(r.message);
+    }
+    async function load() {
+      const today = document.getElementById('todayFilter').checked;
+      let url = `/api/expenses?today=${today}`;
+      if (!today) url = `/api/expenses?today=false&from_date=${document.getElementById('fromDate').value}&to_date=${document.getElementById('toDate').value}`;
+      const j = await (await fetch(url)).json();
+      const tbody = document.getElementById('body'); tbody.innerHTML = '';
+      let tot = 0;
+      (j.data || []).forEach(r => {
+        tot += Number(r.amount || 0);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="p-3">${r.expense_date}</td><td class="p-3">${r.description}</td>
+          <td class="p-3 text-right font-medium">₹${Number(r.amount).toFixed(2)}</td>
+          <td class="p-3 text-center"><button onclick="del(${r.id})" class="text-red-600 hover:text-red-800" data-testid="delete-expense-${r.id}"><i class="fa fa-trash"></i></button></td>`;
+        tbody.appendChild(tr);
+      });
+      if (!tbody.children.length) tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500">No expenses recorded.</td></tr>';
+      document.getElementById('total').innerText = '₹' + tot.toFixed(2);
+    }
+    load();
+  </script>
+</body>
+</html>

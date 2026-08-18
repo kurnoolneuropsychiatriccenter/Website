@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medicine Return</title>
   <script src="js/auth.js"></script>
-  <title>Medicine Return - Kurnool Neuro Psychiatric and ENT Center</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -13,190 +13,119 @@
     <div class="container mx-auto px-4 py-4 flex justify-between items-center">
       <div class="flex items-center space-x-3">
         <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
-        <h1 class="text-xl font-bold">Medicine Return to Supplier</h1>
+        <h1 class="text-xl font-bold">Medicine Return</h1>
       </div>
-      <div>
-        <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
-      </div>
+      <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
     </div>
   </header>
 
   <div class="container mx-auto px-4 py-6 max-w-4xl">
-    <form id="returnForm" onsubmit="saveReturn(event)">
-      <div class="bg-white p-6 rounded-lg shadow mb-6 space-y-4">
-        <h2 class="text-lg font-bold text-gray-800 border-b pb-2"><i class="fa fa-rotate-left mr-2 text-red-600"></i> Return Entry</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium mb-1">Return Date *</label>
-            <input type="date" id="returnDate" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="return-date-input">
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Select Medicine *</label>
-            <select id="medicineSelect" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" onchange="onMedicineSelect()" data-testid="medicine-select">
-              <option value="">Select Medicine</option>
-            </select>
-          </div>
-        </div>
+    <div class="bg-white p-6 rounded-lg shadow mb-6">
+      <h2 class="text-lg font-bold mb-4"><i class="fa fa-rotate-left mr-2 text-red-500"></i> New Return</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-sm font-medium mb-1">Batch Number</label>
-            <input type="text" id="batchNumber" class="w-full border px-3 py-2 rounded text-sm bg-gray-100" readonly data-testid="batch-input">
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Current Stock Available</label>
-            <input type="text" id="availableStock" class="w-full border px-3 py-2 rounded text-sm bg-gray-100 font-bold text-blue-600" readonly data-testid="stock-input">
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Return Qty *</label>
-            <input type="number" id="returnQty" min="1" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="return-qty-input">
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium mb-1">Supplier Name</label>
-            <input type="text" id="supplierName" placeholder="Distributor name..." class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="supplier-input">
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Reason for Return</label>
-            <input type="text" id="reason" placeholder="e.g. Expiring soon / Damaged..." class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="reason-input">
-          </div>
-        </div>
+      <div class="mb-4 flex gap-4 text-sm">
+        <label class="flex items-center gap-1"><input type="radio" name="returnType" value="patient" checked onchange="onTypeChange()" data-testid="return-type-patient"> <b>Patient Return</b> (medicine goes BACK to stock)</label>
+        <label class="flex items-center gap-1"><input type="radio" name="returnType" value="supplier" onchange="onTypeChange()" data-testid="return-type-supplier"> <b>Supplier Return</b> (stock DECREASES)</label>
       </div>
 
-      <div class="flex justify-end">
-        <button type="submit" class="bg-red-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-red-700 shadow text-lg" data-testid="save-return-btn">
-          <i class="fa fa-paper-plane mr-2"></i> Save Return & Decrease Stock
-        </button>
+      <div id="patientBox" class="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div>
+          <label class="block text-xs font-medium mb-1">Patient Code *</label>
+          <div class="flex">
+            <input type="text" id="patientCode" placeholder="KNC001000001" class="flex-1 border px-3 py-2 rounded-l text-sm uppercase" onblur="fetchPatient()" data-testid="patient-code-input">
+            <button type="button" onclick="fetchPatient()" class="bg-blue-600 text-white px-3 rounded-r text-sm" data-testid="fetch-patient-btn"><i class="fa fa-search"></i></button>
+          </div>
+          <input type="hidden" id="patientId">
+        </div>
+        <div><label class="block text-xs font-medium mb-1">Name</label><input id="patientName" readonly class="w-full border bg-gray-100 px-3 py-2 rounded text-sm" data-testid="patient-name-input"></div>
+        <div><label class="block text-xs font-medium mb-1">Mobile</label><input id="patientPhone" readonly class="w-full border bg-gray-100 px-3 py-2 rounded text-sm" data-testid="patient-phone-input"></div>
       </div>
-    </form>
 
-    <!-- Return History -->
-    <div class="mt-8">
-      <h3 class="text-lg font-bold text-gray-800 mb-4">Recent Returns History</h3>
-      <div class="bg-white rounded-lg shadow overflow-x-auto">
-        <table class="w-full text-left border-collapse" data-testid="returns-table">
-          <thead>
-            <tr class="bg-blue-50 text-blue-900 border-b text-xs">
-              <th class="p-3">Date</th>
-              <th class="p-3">Medicine Name</th>
-              <th class="p-3">Batch</th>
-              <th class="p-3">Returned Qty</th>
-              <th class="p-3">Supplier</th>
-              <th class="p-3">Reason</th>
-            </tr>
-          </thead>
-          <tbody id="returnsTableBody" class="divide-y text-sm">
-            <tr><td colspan="6" class="p-4 text-center text-gray-500">Loading returns...</td></tr>
-          </tbody>
+      <div id="supplierBox" class="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3 hidden">
+        <div><label class="block text-xs font-medium mb-1">Supplier Name</label><input id="supplier" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-input"></div>
+      </div>
+
+      <form onsubmit="save(event)" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <div>
+          <label class="block text-xs font-medium mb-1">Medicine *</label>
+          <select id="medicine" required class="w-full border px-3 py-2 rounded text-sm" onchange="onMed()" data-testid="medicine-select"><option value="">Select</option></select>
+        </div>
+        <div><label class="block text-xs font-medium mb-1">Batch</label><input id="batch" class="w-full border px-3 py-2 rounded text-sm" data-testid="batch-input"></div>
+        <div><label class="block text-xs font-medium mb-1">Qty *</label><input id="qty" type="number" min="1" step="1" required class="w-full border px-3 py-2 rounded text-sm" data-testid="qty-input"><p id="stockHint" class="text-[10px] text-gray-500 mt-1"></p></div>
+        <div><label class="block text-xs font-medium mb-1">Reason</label><input id="reason" placeholder="Expired / Damaged / Not needed" class="w-full border px-3 py-2 rounded text-sm" data-testid="reason-input"></div>
+        <div><button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="save-return-btn"><i class="fa fa-save mr-1"></i> Save Return</button></div>
+      </form>
+    </div>
+
+    <div class="bg-white p-6 rounded-lg shadow">
+      <h2 class="text-lg font-bold mb-3"><i class="fa fa-list mr-2 text-blue-600"></i> Return History</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm border-collapse" data-testid="return-history-table">
+          <thead><tr class="bg-blue-50 text-blue-900 border-b"><th class="p-2">Date</th><th class="p-2">Type</th><th class="p-2">Patient/Supplier</th><th class="p-2">Medicine</th><th class="p-2">Batch</th><th class="p-2 text-right">Qty</th><th class="p-2">Reason</th></tr></thead>
+          <tbody id="hist" class="divide-y"></tbody>
         </table>
       </div>
     </div>
   </div>
 
   <script>
-    let medicinesList = [];
-
-    async function initReturns() {
-      document.getElementById('returnDate').value = new Date().toISOString().split('T')[0];
-      try {
-        const res = await fetch('/api/medicines');
-        const json = await res.json();
-        if (json.success) {
-          medicinesList = json.data;
-          const select = document.getElementById('medicineSelect');
-          medicinesList.forEach(m => {
-            const opt = document.createElement('option');
-            opt.value = m.id;
-            opt.setAttribute('data-batch', m.batch_number || '');
-            opt.setAttribute('data-stock', m.current_stock || 0);
-            opt.innerText = `${m.medicine_name} [Stock: ${m.current_stock}]`;
-            select.appendChild(opt);
-          });
-        }
-      } catch (err) {
-        console.error('Error fetching medicines', err);
-      }
-      loadReturnsHistory();
+    let meds = [];
+    async function init() {
+      meds = (await (await fetch('/api/medicines')).json()).data || [];
+      const sel = document.getElementById('medicine');
+      meds.forEach(m => { const o=document.createElement('option'); o.value=m.id; o.dataset.stock=m.current_stock||0; o.dataset.batch=m.batch_number||''; o.innerText=`${m.medicine_name} [Stock:${m.current_stock||0}]`; sel.appendChild(o); });
+      loadHistory();
     }
-
-    function onMedicineSelect() {
-      const select = document.getElementById('medicineSelect');
-      const opt = select.options[select.selectedIndex];
-      if (opt && opt.value) {
-        document.getElementById('batchNumber').value = opt.getAttribute('data-batch') || '';
-        document.getElementById('availableStock').value = opt.getAttribute('data-stock') || 0;
-      }
+    function onTypeChange() {
+      const t = document.querySelector('input[name="returnType"]:checked').value;
+      document.getElementById('patientBox').classList.toggle('hidden', t !== 'patient');
+      document.getElementById('supplierBox').classList.toggle('hidden', t !== 'supplier');
     }
-
-    async function saveReturn(e) {
+    async function fetchPatient() {
+      const c = document.getElementById('patientCode').value.trim(); if (!c) return;
+      const j = await (await fetch(`/api/patients/code/${encodeURIComponent(c)}`)).json();
+      if (j.success && j.data) { document.getElementById('patientId').value=j.data.id; document.getElementById('patientName').value=j.data.patient_name||''; document.getElementById('patientPhone').value=j.data.mobile||''; }
+      else { alert('Patient not found'); document.getElementById('patientId').value=''; document.getElementById('patientName').value=''; document.getElementById('patientPhone').value=''; }
+    }
+    function onMed() {
+      const sel = document.getElementById('medicine');
+      const opt = sel.options[sel.selectedIndex];
+      document.getElementById('batch').value = opt.dataset.batch || '';
+      document.getElementById('stockHint').innerText = opt.value ? ('Current stock: ' + (opt.dataset.stock||0)) : '';
+    }
+    async function save(e) {
       e.preventDefault();
-      const medicine_id = document.getElementById('medicineSelect').value;
-      const qty = parseFloat(document.getElementById('returnQty').value);
-      const stock = parseFloat(document.getElementById('availableStock').value) || 0;
-
-      if (qty > stock) {
-        alert('Return quantity cannot exceed available stock!');
-        return;
-      }
-
+      const t = document.querySelector('input[name="returnType"]:checked').value;
       const payload = {
-        return_date: document.getElementById('returnDate').value,
-        medicine_id: medicine_id,
-        batch: document.getElementById('batchNumber').value,
-        qty: qty,
+        medicine_id: document.getElementById('medicine').value,
+        batch: document.getElementById('batch').value,
+        qty: parseFloat(document.getElementById('qty').value) || 0,
         reason: document.getElementById('reason').value,
-        supplier: document.getElementById('supplierName').value
+        return_type: t
       };
-
-      try {
-        const res = await fetch('/api/returns', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const json = await res.json();
-        if (json.success) {
-          alert('Medicine return saved successfully and stock decreased.');
-          location.reload();
-        } else {
-          alert(json.message);
-        }
-      } catch (err) {
-        console.error('Error saving return', err);
+      if (t === 'patient') {
+        if (!document.getElementById('patientId').value) { alert('Load patient by code first.'); return; }
+        payload.patient_id = document.getElementById('patientId').value;
+      } else {
+        payload.supplier = document.getElementById('supplier').value;
       }
+      const j = await (await fetch('/api/returns', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})).json();
+      if (j.success) { alert(j.message); loadHistory(); init(); }  // reload meds to see new stock
+      else alert(j.message);
     }
-
-    async function loadReturnsHistory() {
-      try {
-        const res = await fetch('/api/returns');
-        const json = await res.json();
-        const tbody = document.getElementById('returnsTableBody');
-        tbody.innerHTML = '';
-        if (json.success && json.data.length > 0) {
-          json.data.forEach(r => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td class="p-3">${r.return_date}</td>
-              <td class="p-3 font-medium">${r.medicine_name}</td>
-              <td class="p-3">${r.batch || '-'}</td>
-              <td class="p-3 font-bold text-red-600">${r.qty}</td>
-              <td class="p-3">${r.supplier || '-'}</td>
-              <td class="p-3">${r.reason || '-'}</td>
-            `;
-            tbody.appendChild(tr);
-          });
-        } else {
-          tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-gray-500">No returns found.</td></tr>`;
-        }
-      } catch (err) {
-        console.error('Error loading returns', err);
-      }
+    async function loadHistory() {
+      const j = await (await fetch('/api/returns')).json();
+      const tb = document.getElementById('hist'); tb.innerHTML = '';
+      (j.data || []).forEach(r => {
+        const person = r.return_type==='patient' ? `${r.patient_code||''} - ${r.patient_name||''}` : (r.supplier || '-');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="p-2">${r.return_date}</td><td class="p-2">${r.return_type==='patient'?'<span class="text-green-600 font-medium">Patient</span>':'<span class="text-red-600 font-medium">Supplier</span>'}</td><td class="p-2">${person}</td><td class="p-2">${r.medicine_name}</td><td class="p-2">${r.batch||'-'}</td><td class="p-2 text-right">${r.qty}</td><td class="p-2">${r.reason||''}</td>`;
+        tb.appendChild(tr);
+      });
+      if (!tb.children.length) tb.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-gray-500">No returns yet.</td></tr>';
     }
-
-    initReturns();
+    init();
   </script>
 </body>
 </html>

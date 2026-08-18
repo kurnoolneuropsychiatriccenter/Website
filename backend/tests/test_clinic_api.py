@@ -165,6 +165,7 @@ def test_medicalbill_save_decrements_stock(s, state):
 
     payload = {"bill_date": TODAY, "patient_id": state["patient_id"],
                "discount_percent": 10,
+               "tax_percent": 0,
                "items": [{"medicine_id": mid, "batch": "NB1", "expiry": "2028-01-01",
                           "qty": 5, "rate": 9}]}
     r = s.post(f"{BASE_URL}/api/medicalbill/save", json=payload)

@@ -122,15 +122,17 @@ def test_reference_math_print_payload(s, state):
     i1 = by_med[state["mid1"]]
     i2 = by_med[state["mid2"]]
 
-    # Per-item new fields present
+    # Per-item new fields present (schema keeps sgst/cgst cols for backward compat but new server uses tax_percent/tax_amount)
     for it in (i1, i2):
-        for k in ("hsn", "mrp", "sgst_percent", "cgst_percent", "sgst_amount", "cgst_amount", "amount"):
+        for k in ("hsn", "mrp", "amount", "tax_percent", "tax_amount"):
             assert k in it, f"missing {k} in item {it}"
 
-    # Reference amounts
+    # Reference amounts (new server: qty*rate*(1+5%) -> 45*1.05=47.25, 110*1.05=115.50)
     assert abs(i1["amount"] - 47.25) < 0.02, i1
     assert abs(i2["amount"] - 115.50) < 0.02, i2
-    assert abs(i1["sgst_amount"] - 1.125) < 0.02 or abs(i1["sgst_amount"] - 1.13) < 0.02
+    # tax_amount = base * 5% => 45*0.05=2.25, 110*0.05=5.50
+    assert abs(i1["tax_amount"] - 2.25) < 0.02, i1
+    assert abs(i2["tax_amount"] - 5.50) < 0.02, i2
     assert i1["hsn"] == "3004"
     assert i2["hsn"] == "3003"
     assert i1["mrp"] == 50

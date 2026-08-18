@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Purchase Entry</title>
   <script src="js/auth.js"></script>
-  <title>Purchase Master - Kurnool Neuro Psychiatric and ENT Center</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -13,9 +13,9 @@
     <div class="container mx-auto px-4 py-4 flex justify-between items-center">
       <div class="flex items-center space-x-3">
         <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
-        <h1 class="text-xl font-bold">Medicine Purchase Entry</h1>
+        <h1 class="text-xl font-bold">Purchase Entry</h1>
       </div>
-      <div class="space-x-3">
+      <div class="space-x-2">
         <a href="purchasehistory.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-history mr-1"></i> Purchase History</a>
         <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
       </div>
@@ -23,65 +23,75 @@
   </header>
 
   <div class="container mx-auto px-4 py-6">
-    <form id="purchaseForm" onsubmit="savePurchase(event)">
-      <!-- Purchase Header info -->
-      <div class="bg-white p-6 rounded-lg shadow mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label class="block text-sm font-medium mb-1">Invoice Number *</label>
-          <input type="text" id="invoiceNo" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="invoice-no-input">
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Supplier Name *</label>
-          <input type="text" id="supplierName" required placeholder="e.g. Pharma Distributor" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="supplier-name-input">
-        </div>
-        <div>
-          <label class="block text-sm font-medium mb-1">Invoice Date *</label>
-          <input type="date" id="invoiceDate" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="invoice-date-input">
+    <form onsubmit="savePurchase(event)">
+
+      <!-- Supplier / Invoice Info -->
+      <div class="bg-white p-6 rounded-lg shadow mb-6">
+        <h2 class="text-lg font-bold mb-4"><i class="fa fa-truck mr-2 text-blue-600"></i> Supplier &amp; Invoice</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div><label class="block text-xs font-medium mb-1">Invoice No *</label><input type="text" id="invoiceNo" required class="w-full border px-3 py-2 rounded text-sm" data-testid="invoice-no-input"></div>
+          <div><label class="block text-xs font-medium mb-1">Invoice Date *</label><input type="date" id="invoiceDate" required class="w-full border px-3 py-2 rounded text-sm" data-testid="invoice-date-input"></div>
+          <div><label class="block text-xs font-medium mb-1">Supplier Name *</label><input type="text" id="supplierName" required class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-name-input"></div>
+
+          <div><label class="block text-xs font-medium mb-1">GST Number</label><input type="text" id="supGst" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-gst-input"></div>
+          <div><label class="block text-xs font-medium mb-1">FSSAI Number</label><input type="text" id="supFssai" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-fssai-input"></div>
+          <div><label class="block text-xs font-medium mb-1">PAN Number</label><input type="text" id="supPan" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-pan-input"></div>
+
+          <div><label class="block text-xs font-medium mb-1">MSME Number</label><input type="text" id="supMsme" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-msme-input"></div>
+          <div><label class="block text-xs font-medium mb-1">Phone</label><input type="text" id="supPhone" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-phone-input"></div>
+          <div><label class="block text-xs font-medium mb-1">Address</label><input type="text" id="supAddress" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-address-input"></div>
         </div>
       </div>
 
-      <!-- Medicine Table -->
+      <!-- Purchase Items -->
       <div class="bg-white p-6 rounded-lg shadow mb-6">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-lg font-bold text-gray-800">Purchased Medicines</h2>
-          <button type="button" onclick="addPurchaseRow()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700" data-testid="add-more-medicine-btn">
-            <i class="fa fa-plus mr-1"></i> Add More Medicine
-          </button>
+          <h2 class="text-lg font-bold"><i class="fa fa-cart-plus mr-2 text-blue-600"></i> Purchase Items</h2>
+          <button type="button" onclick="addRow()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700" data-testid="add-more-med-btn"><i class="fa fa-plus mr-1"></i> Add More Medicine</button>
         </div>
-
         <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse" data-testid="purchase-items-table">
+          <table class="w-full text-left border-collapse text-xs" data-testid="purchase-items-table">
             <thead>
-              <tr class="bg-blue-50 text-blue-900 border-b text-xs">
-                <th class="p-2">Medicine</th>
+              <tr class="bg-blue-50 text-blue-900 border-b">
+                <th class="p-2 w-8">S.No</th>
+                <th class="p-2">Qty</th>
+                <th class="p-2">Package</th>
+                <th class="p-2">Product</th>
                 <th class="p-2">Batch</th>
                 <th class="p-2">Expiry</th>
-                <th class="p-2">Qty</th>
                 <th class="p-2">HSN</th>
-                <th class="p-2">Rate (₹)</th>
-                <th class="p-2">MRP (₹)</th>
-                <th class="p-2">Amount (₹)</th>
-                <th class="p-2 text-center">Action</th>
+                <th class="p-2">MRP</th>
+                <th class="p-2">Rate</th>
+                <th class="p-2">Disc %</th>
+                <th class="p-2">SGST %</th>
+                <th class="p-2">IGST %</th>
+                <th class="p-2">Amount</th>
+                <th class="p-2 w-8"></th>
               </tr>
             </thead>
-            <tbody id="purchaseRowsBody" class="divide-y text-sm">
-              <!-- Dynamically added rows -->
-            </tbody>
+            <tbody id="rowsBody" class="divide-y"></tbody>
           </table>
         </div>
 
-        <!-- Grand Total Section -->
-        <div class="mt-6 flex justify-end items-center border-t pt-4">
-          <div class="text-right">
-            <span class="text-gray-600 text-lg mr-4 font-medium">Grand Total:</span>
-            <span id="grandTotalDisplay" class="text-2xl font-bold text-blue-600" data-testid="grand-total">₹0.00</span>
+        <div class="mt-6 border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+          <div>
+            <label class="block text-sm font-medium mb-1">Adjustment (Add / Less)</label>
+            <input type="number" id="adjustment" step="0.01" value="0" placeholder="Positive to Add, Negative to Less" class="w-full border px-3 py-2 rounded text-sm" data-testid="adjustment-input">
+            <p class="text-xs text-gray-500 mt-1">e.g. -20.50 to reduce ₹20.50, or 15 to add ₹15.</p>
+          </div>
+          <div class="text-right space-y-2 bg-gray-50 p-4 rounded-lg border">
+            <div class="flex justify-between text-sm"><span class="text-gray-600">Sub Total:</span><span id="subtotalDisplay" class="font-bold" data-testid="subtotal-display">0.00</span></div>
+            <div class="flex justify-between text-sm"><span class="text-gray-600">SGST:</span><span id="sgstDisplay" class="font-bold" data-testid="sgst-display">0.00</span></div>
+            <div class="flex justify-between text-sm"><span class="text-gray-600">CGST/IGST:</span><span id="cgstDisplay" class="font-bold" data-testid="cgst-display">0.00</span></div>
+            <div class="flex justify-between text-sm"><span class="text-gray-600">Add / Less:</span><span id="adjDisplay" class="font-bold" data-testid="adj-display">0.00</span></div>
+            <div class="flex justify-between text-lg border-t pt-2"><span class="font-bold">Grand Total:</span><span id="grandTotalDisplay" class="font-bold text-blue-700 text-2xl" data-testid="grand-total-display">0.00</span></div>
           </div>
         </div>
       </div>
 
       <div class="flex justify-end">
-        <button type="submit" class="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700 shadow-lg text-lg" data-testid="save-purchase-btn">
-          <i class="fa fa-save mr-2"></i> Save Purchase & Update Stock
+        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-bold text-lg shadow-lg" data-testid="save-purchase-btn">
+          <i class="fa fa-save mr-2"></i> Save Purchase (updates stock)
         </button>
       </div>
     </form>
@@ -89,146 +99,124 @@
 
   <script>
     let allMedicines = [];
-
-    async function initPurchase() {
-      // Set today date
+    async function init() {
       document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
-      try {
-        const res = await fetch('/api/medicines');
-        const json = await res.json();
-        if (json.success) {
-          allMedicines = json.data;
-          addPurchaseRow(); // Add first row
-        }
-      } catch (err) {
-        console.error('Error fetching medicines', err);
-      }
+      const j = await (await fetch('/api/medicines')).json();
+      allMedicines = j.data || [];
+      addRow();
     }
-
-    function addPurchaseRow() {
-      const tbody = document.getElementById('purchaseRowsBody');
-      const rowId = Date.now() + Math.random();
+    function addRow() {
+      const tbody = document.getElementById('rowsBody');
+      const rid = 'r' + Date.now() + Math.floor(Math.random() * 999);
       const tr = document.createElement('tr');
-      tr.id = `row-${rowId}`;
-
-      let medOptions = '<option value="">Select Medicine</option>';
-      allMedicines.forEach(m => {
-        medOptions += `<option value="${m.id}" data-rate="${m.rate || 0}" data-mrp="${m.mrp || 0}" data-hsn="${m.hsn_number || ''}">${m.medicine_name} (${m.batch_number || 'No batch'})</option>`;
-      });
-
+      tr.id = rid;
+      let opt = '<option value="">Select</option>';
+      allMedicines.forEach(m => opt += `<option value="${m.id}" data-hsn="${m.hsn_number||''}">${m.medicine_name}</option>`);
       tr.innerHTML = `
-        <td class="p-2">
-          <select class="border px-2 py-1 rounded text-sm w-48 med-select focus:outline-blue-500" onchange="onMedicineChange('${rowId}')" required data-testid="purchase-med-select">
-            ${medOptions}
-          </select>
-        </td>
-        <td class="p-2"><input type="text" class="border px-2 py-1 rounded text-sm w-24 batch-input" required data-testid="purchase-batch-input"></td>
-        <td class="p-2"><input type="date" class="border px-2 py-1 rounded text-sm w-32 expiry-input" required data-testid="purchase-expiry-input"></td>
-        <td class="p-2"><input type="number" min="1" value="1" class="border px-2 py-1 rounded text-sm w-20 qty-input" oninput="calculateRow('${rowId}')" required data-testid="purchase-qty-input"></td>
-        <td class="p-2"><input type="text" class="border px-2 py-1 rounded text-sm w-20 hsn-input" data-testid="purchase-hsn-input"></td>
-        <td class="p-2"><input type="number" step="0.01" min="0" value="0" class="border px-2 py-1 rounded text-sm w-24 rate-input" oninput="calculateRow('${rowId}')" required data-testid="purchase-rate-input"></td>
-        <td class="p-2"><input type="number" step="0.01" min="0" value="0" class="border px-2 py-1 rounded text-sm w-24 mrp-input" required data-testid="purchase-mrp-input"></td>
-        <td class="p-2 font-semibold text-gray-700 amount-display">₹0.00</td>
-        <td class="p-2 text-center">
-          <button type="button" onclick="removeRow('${rowId}')" class="text-red-600 hover:text-red-800" data-testid="remove-row-btn"><i class="fa fa-trash"></i></button>
-        </td>
-      `;
+        <td class="p-1 sno-cell font-semibold">1</td>
+        <td class="p-1"><input type="number" min="0" step="0.01" value="1" class="border w-16 px-1 py-1 rounded qty" oninput="calc('${rid}')" required data-testid="pur-qty"></td>
+        <td class="p-1"><input type="text" placeholder="10*10" class="border w-20 px-1 py-1 rounded pack" data-testid="pur-pack"></td>
+        <td class="p-1"><select class="border w-40 px-1 py-1 rounded med" onchange="onMed('${rid}')" required data-testid="pur-med">${opt}</select></td>
+        <td class="p-1"><input type="text" class="border w-20 px-1 py-1 rounded batch" data-testid="pur-batch"></td>
+        <td class="p-1"><input type="text" placeholder="MM/YY" class="border w-20 px-1 py-1 rounded expiry" data-testid="pur-expiry"></td>
+        <td class="p-1"><input type="text" class="border w-20 px-1 py-1 rounded hsn" data-testid="pur-hsn"></td>
+        <td class="p-1"><input type="number" step="0.01" min="0" value="0" class="border w-20 px-1 py-1 rounded mrp" data-testid="pur-mrp"></td>
+        <td class="p-1"><input type="number" step="0.01" min="0" value="0" class="border w-20 px-1 py-1 rounded rate" oninput="calc('${rid}')" required data-testid="pur-rate"></td>
+        <td class="p-1"><input type="number" step="0.01" min="0" value="0" class="border w-14 px-1 py-1 rounded disc" oninput="calc('${rid}')" data-testid="pur-disc"></td>
+        <td class="p-1"><input type="number" step="0.01" min="0" value="0" class="border w-14 px-1 py-1 rounded sgst" oninput="calc('${rid}')" data-testid="pur-sgst"></td>
+        <td class="p-1"><input type="number" step="0.01" min="0" value="0" class="border w-14 px-1 py-1 rounded igst" oninput="calc('${rid}')" data-testid="pur-igst"></td>
+        <td class="p-1 amount text-right font-semibold">0.00</td>
+        <td class="p-1 text-center"><button type="button" onclick="rm('${rid}')" class="text-red-600" data-testid="pur-remove"><i class="fa fa-trash"></i></button></td>`;
       tbody.appendChild(tr);
+      renum();
     }
-
-    function onMedicineChange(rowId) {
-      const tr = document.getElementById(`row-${rowId}`);
-      const select = tr.querySelector('.med-select');
-      const opt = select.options[select.selectedIndex];
-      if (opt && opt.value) {
-        tr.querySelector('.rate-input').value = opt.getAttribute('data-rate') || 0;
-        tr.querySelector('.mrp-input').value = opt.getAttribute('data-mrp') || 0;
-        tr.querySelector('.hsn-input').value = opt.getAttribute('data-hsn') || '';
-        calculateRow(rowId);
-      }
+    function renum() { document.querySelectorAll('#rowsBody tr').forEach((t,i) => t.querySelector('.sno-cell').innerText=i+1); }
+    function onMed(rid) {
+      const tr = document.getElementById(rid);
+      const sel = tr.querySelector('.med');
+      const opt = sel.options[sel.selectedIndex];
+      if (opt.value) tr.querySelector('.hsn').value = opt.getAttribute('data-hsn') || '';
+      calc(rid);
     }
-
-    function calculateRow(rowId) {
-      const tr = document.getElementById(`row-${rowId}`);
-      const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
-      const rate = parseFloat(tr.querySelector('.rate-input').value) || 0;
-      const amount = qty * rate;
-      tr.querySelector('.amount-display').innerText = '₹' + amount.toFixed(2);
-      calculateGrandTotal();
+    function calc(rid) {
+      const tr = document.getElementById(rid);
+      const qty = parseFloat(tr.querySelector('.qty').value)||0;
+      const rate = parseFloat(tr.querySelector('.rate').value)||0;
+      const disc = parseFloat(tr.querySelector('.disc').value)||0;
+      const sgst = parseFloat(tr.querySelector('.sgst').value)||0;
+      const igst = parseFloat(tr.querySelector('.igst').value)||0;
+      const base = qty * rate * (1 - disc/100);
+      const sAmt = base * sgst/100;
+      const cAmt = base * (igst || sgst)/100;
+      const amt = base + sAmt + cAmt;
+      tr.querySelector('.amount').innerText = amt.toFixed(2);
+      totals();
     }
-
-    function calculateGrandTotal() {
-      let grandTotal = 0;
-      document.querySelectorAll('#purchaseRowsBody tr').forEach(tr => {
-        const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
-        const rate = parseFloat(tr.querySelector('.rate-input').value) || 0;
-        grandTotal += (qty * rate);
+    function totals() {
+      let sub=0, sg=0, cg=0;
+      document.querySelectorAll('#rowsBody tr').forEach(tr => {
+        const qty = parseFloat(tr.querySelector('.qty').value)||0;
+        const rate = parseFloat(tr.querySelector('.rate').value)||0;
+        const disc = parseFloat(tr.querySelector('.disc').value)||0;
+        const sgst = parseFloat(tr.querySelector('.sgst').value)||0;
+        const igst = parseFloat(tr.querySelector('.igst').value)||0;
+        const base = qty * rate * (1 - disc/100);
+        sub += base;
+        sg += base * sgst/100;
+        cg += base * (igst || sgst)/100;
       });
-      document.getElementById('grandTotalDisplay').innerText = '₹' + grandTotal.toFixed(2);
+      const adj = parseFloat(document.getElementById('adjustment').value)||0;
+      document.getElementById('subtotalDisplay').innerText = sub.toFixed(2);
+      document.getElementById('sgstDisplay').innerText = sg.toFixed(2);
+      document.getElementById('cgstDisplay').innerText = cg.toFixed(2);
+      document.getElementById('adjDisplay').innerText = adj.toFixed(2);
+      document.getElementById('grandTotalDisplay').innerText = (sub + sg + cg + adj).toFixed(2);
     }
-
-    function removeRow(rowId) {
-      const tbody = document.getElementById('purchaseRowsBody');
-      if (tbody.rows.length <= 1) {
-        alert('At least one medicine row is required.');
-        return;
-      }
-      const tr = document.getElementById(`row-${rowId}`);
-      tr.remove();
-      calculateGrandTotal();
+    document.getElementById('adjustment').addEventListener('input', totals);
+    function rm(rid) {
+      if (document.querySelectorAll('#rowsBody tr').length <= 1) { alert('At least one row is required.'); return; }
+      document.getElementById(rid).remove(); renum(); totals();
     }
-
     async function savePurchase(e) {
       e.preventDefault();
-      const invoice_no = document.getElementById('invoiceNo').value;
-      const supplier_name = document.getElementById('supplierName').value;
-      const invoice_date = document.getElementById('invoiceDate').value;
-
       const items = [];
       let valid = true;
-
-      document.querySelectorAll('#purchaseRowsBody tr').forEach(tr => {
-        const medicine_id = tr.querySelector('.med-select').value;
-        const batch = tr.querySelector('.batch-input').value;
-        const expiry = tr.querySelector('.expiry-input').value;
-        const qty = parseFloat(tr.querySelector('.qty-input').value);
-        const hsn = tr.querySelector('.hsn-input').value;
-        const rate = parseFloat(tr.querySelector('.rate-input').value);
-        const mrp = parseFloat(tr.querySelector('.mrp-input').value);
-
-        if (!medicine_id || !batch || !expiry || isNaN(qty) || isNaN(rate)) {
-          valid = false;
-        } else {
-          items.push({ medicine_id, batch, expiry, qty, hsn, rate, mrp });
-        }
-      });
-
-      if (!valid || items.length === 0) {
-        alert('Please fill all required fields in purchase items.');
-        return;
-      }
-
-      const payload = { invoice_no, supplier_name, invoice_date, items };
-
-      try {
-        const res = await fetch('/api/purchase/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+      document.querySelectorAll('#rowsBody tr').forEach(tr => {
+        const mid = tr.querySelector('.med').value;
+        const qty = parseFloat(tr.querySelector('.qty').value);
+        const rate = parseFloat(tr.querySelector('.rate').value);
+        if (!mid || isNaN(qty) || qty<=0 || isNaN(rate)) valid = false;
+        items.push({
+          medicine_id: mid, qty, rate,
+          package: tr.querySelector('.pack').value,
+          batch: tr.querySelector('.batch').value,
+          expiry: tr.querySelector('.expiry').value,
+          hsn: tr.querySelector('.hsn').value,
+          mrp: parseFloat(tr.querySelector('.mrp').value)||0,
+          discount_percent: parseFloat(tr.querySelector('.disc').value)||0,
+          sgst_percent: parseFloat(tr.querySelector('.sgst').value)||0,
+          igst_percent: parseFloat(tr.querySelector('.igst').value)||0
         });
-        const json = await res.json();
-        if (json.success) {
-          alert('Purchase saved successfully and medicine stock updated!');
-          window.location.href = 'purchasehistory.html';
-        } else {
-          alert(json.message);
-        }
-      } catch (err) {
-        console.error('Error saving purchase', err);
-      }
+      });
+      if (!valid) { alert('Every row needs Medicine + Qty + Rate.'); return; }
+      const payload = {
+        invoice_no: document.getElementById('invoiceNo').value,
+        invoice_date: document.getElementById('invoiceDate').value,
+        supplier_name: document.getElementById('supplierName').value,
+        supplier_gst: document.getElementById('supGst').value,
+        supplier_fssai: document.getElementById('supFssai').value,
+        supplier_pan: document.getElementById('supPan').value,
+        supplier_msme: document.getElementById('supMsme').value,
+        supplier_phone: document.getElementById('supPhone').value,
+        supplier_address: document.getElementById('supAddress').value,
+        adjustment: parseFloat(document.getElementById('adjustment').value)||0,
+        items
+      };
+      const j = await (await fetch('/api/purchase/save', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})).json();
+      if (j.success) { alert(`Purchase saved. Grand Total ₹${Number(j.data.grand_total).toFixed(2)}`); location.href='purchasehistory.html'; }
+      else alert(j.message);
     }
-
-    initPurchase();
+    init();
   </script>
 </body>
 </html>

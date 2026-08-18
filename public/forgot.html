@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forgot Password</title>
+  <script src="js/auth.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gradient-to-br from-blue-900 to-blue-700 min-h-screen flex items-center justify-center px-4">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+    <div class="text-center mb-6">
+      <div class="inline-flex items-center justify-center w-14 h-14 bg-yellow-100 rounded-full mb-3"><i class="fa fa-key text-2xl text-yellow-700"></i></div>
+      <h1 class="text-xl font-bold text-gray-800">Forgot Password</h1>
+      <p class="text-sm text-gray-500 mt-1">Enter your <b>Recovery Code</b> (from Settings) to see your login password.</p>
+    </div>
+
+    <form onsubmit="doForgot(event)" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Recovery Code</label>
+        <input type="text" id="recCode" required autocomplete="off"
+               class="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg font-mono uppercase tracking-widest focus:outline-blue-500"
+               placeholder="8-character code" data-testid="recovery-code-input">
+      </div>
+      <div id="result" class="hidden"></div>
+      <button type="submit" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-3 rounded-lg text-lg shadow" data-testid="recover-btn">
+        <i class="fa fa-unlock mr-2"></i> Reveal My Password
+      </button>
+      <a href="login.html" class="block text-center text-sm text-blue-600 mt-3 hover:underline">Back to Login</a>
+    </form>
+  </div>
+
+  <script>
+    async function doForgot(e) {
+      e.preventDefault();
+      const recovery_code = document.getElementById('recCode').value.trim();
+      const resBox = document.getElementById('result');
+      resBox.className = 'hidden';
+      const j = await (await fetch('/api/auth/forgot-password', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ recovery_code })})).json();
+      if (j.success) {
+        resBox.className = 'bg-green-50 border border-green-200 text-green-800 text-sm rounded px-4 py-3';
+        resBox.innerHTML = `Your login password is: <span class="font-mono font-bold text-lg">${j.data.login_password}</span><br><span class="text-xs">Please change it from Settings once you log in.</span>`;
+      } else {
+        resBox.className = 'bg-red-50 border border-red-200 text-red-700 text-sm rounded px-4 py-3';
+        resBox.innerText = j.message || 'Failed';
+      }
+    }
+  </script>
+</body>
+</html>

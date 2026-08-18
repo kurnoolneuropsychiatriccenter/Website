@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 8 — validated the 11-feature expansion (forgot-password/recovery-code, supplier+purchase columns, medical bill tax_percent=5+adjustment, patient/supplier returns, expenses CRUD, staff+attendance upsert, records/detailed, backup download, dashboard/nav pages). Added /app/backend/tests/test_new_features.py (20 new tests, all pass). Updated /app/backend/tests/test_clinic_api.py::test_medicalbill_save_decrements_stock to pass tax_percent=0 (old assertion of 40.5 broke because default tax is now 5%). Updated /app/backend/tests/test_asha_medicals.py::test_reference_math_print_payload to assert on new tax_percent/tax_amount fields instead of deprecated sgst_amount (which is now always 0 in the schema). Full pytest suite: 118 passed, 1 skipped (destructive server-restart test, pre-existing skip). Frontend smoke: /login.html has Forgot Password link; /forgot.html loads without auth and shows Recovery Code input; dashboard has Records/Expenses/Staff/Settings/Logout cards; /expenses, /staff, /records, /purchase, /medicalbill, /returns, /settings pages all render; purchase page has GST/FSSAI/PAN/MSME/Package/SGST/IGST/Adjustment/HSN; medical bill page has Pack/HSN/Batch/MRP/Tax/Adjustment/Discount columns; returns page has Patient/Supplier radios; settings has Recovery+Backup+GST+Change sections.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "test_new_features.py::test_login_admin123_still_works", "issue": "Flaky against parallel test_auth_password.py which briefly rotates admin123 -> newlogin456. Mitigated with retry loop (up to 4s). Not a production bug."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_clinic_api.py",
+    "/app/backend/tests/test_asha_medicals.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.js is now 1653 lines — strongly consider splitting into /routes/*.js (auth, records, staff, expenses, backup) before next feature slice.",
+    "Purchase and medical-bill save routes use a nested 'done'/counter callback pattern; on any error mid-loop the response can be sent multiple times (headers-already-sent race). Consider Promise.all with prepared statements.",
+    "medical_bill_items still contains sgst_percent/cgst_percent/sgst_amount/cgst_amount columns which are always written as 0 in the new tax_percent-based path. Either drop them or wire them up to keep the schema clean.",
+    "/api/backup/download is behind the auth guard (good), but the file is served with res.download which reads the whole DB in memory — fine for a small clinic DB, note for scale.",
+    "recovery_code is auto-backfilled on boot (per requirement). Consider surfacing the code to admin only once via a 'reveal' UX to encourage them to save it offline."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py (new — 20 tests covering all 11 features)",
+    "/app/backend/tests/test_clinic_api.py (added tax_percent=0 so the fixed math still matches)",
+    "/app/backend/tests/test_asha_medicals.py (switched sgst_amount assertion to tax_amount)"
+  ],
+  "success_rate": {"backend": "100% (118/118 executed, 1 pre-existing intentional skip)", "frontend": "100% of smoke checks"},
+  "test_credentials": "Login: admin123 | Delete: delete123 | Recovery: fetched at runtime from /api/settings",
+  "seed_data_creation": "None — tests create and clean up their own TEST_* rows.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New pytest module /app/backend/tests/test_new_features.py covers all 11 features. It relies on the conftest auto-auth + can opt out via X-No-Auth. It creates its own patient, medicine, staff and cleans them up. When adding tests that log in with admin123, remember /app/backend/tests/test_auth_password.py briefly rotates the login password in parallel — add a small retry. Records API returns {rows,total,from,to}; medical/lab rows contain items[]. Backup content starts with 'SQLite format 3'.",
+  "rca of the issue": "N/A — no user-reported bugs. Two pre-existing tests broke because the medical-bill save endpoint changed its default tax from 0 to 5% and moved sgst/cgst storage from per-item to bill-level tax_percent/tax_amount. Both tests were updated to preserve intent (compute+persist tax correctly) as the review request explicitly authorized."
+}

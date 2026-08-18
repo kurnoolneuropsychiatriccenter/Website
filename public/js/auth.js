@@ -5,7 +5,7 @@
   const PAGE = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
 
   // Pages that don't need auth (login screen itself + print pages that reload after session expiry are fine because their APIs are protected — user will just get 401 and be sent to login)
-  const OPEN_PAGES = new Set(['login.html']);
+  const OPEN_PAGES = new Set(['login.html', 'forgot.html']);
 
   const token = sessionStorage.getItem(TOKEN_KEY);
   if (!token && !OPEN_PAGES.has(PAGE)) {

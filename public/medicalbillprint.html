@@ -84,14 +84,12 @@
         <tr>
           <th style="width:22px;">#</th>
           <th>Product</th>
-          <th>Batch</th>
-          <th>Exp</th>
+          <th>Pack</th>
           <th>HSN</th>
-          <th class="num">MRP</th>
+          <th>Batch</th>
           <th class="num">Qty</th>
-          <th class="num">Rate</th>
-          <th class="num">SGST</th>
-          <th class="num">CGST</th>
+          <th class="num">MRP</th>
+          <th class="num">Tax</th>
           <th class="num">Amount</th>
         </tr>
       </thead>
@@ -102,6 +100,7 @@
       <table>
         <tr><td class="lbl">Sub Total</td><td class="val" id="subtotal">0.00</td></tr>
         <tr><td class="lbl">Discount</td><td class="val" id="discount">0.00</td></tr>
+        <tr id="adjRow" style="display:none;"><td class="lbl">Add / Less</td><td class="val" id="adjustment">0.00</td></tr>
         <tr class="grand"><td class="lbl">Grand Total</td><td class="val" id="grandTotal">0.00</td></tr>
       </table>
     </div>
@@ -155,6 +154,11 @@
       document.getElementById('invoiceNo').innerText = b.invoice_no || b.bill_no || '--';
       document.getElementById('subtotal').innerText = Number(b.subtotal || 0).toFixed(2);
       document.getElementById('discount').innerText = Number(b.discount_amount || 0).toFixed(2);
+      const adj = Number(b.adjustment || 0);
+      if (adj !== 0) {
+        document.getElementById('adjRow').style.display = '';
+        document.getElementById('adjustment').innerText = adj.toFixed(2);
+      }
       document.getElementById('grandTotal').innerText = Number(b.grand_total || 0).toFixed(2);
       const tb = document.getElementById('itemsBody'); tb.innerHTML = '';
       (b.items || []).forEach((it, i) => {
@@ -162,14 +166,12 @@
         tr.innerHTML = `
           <td>${i + 1}</td>
           <td>${it.medicine_name || '--'}</td>
-          <td>${it.batch || '--'}</td>
-          <td>${it.expiry || '--'}</td>
+          <td>${it.pack || '--'}</td>
           <td>${it.hsn || '--'}</td>
-          <td class="num">${Number(it.mrp || 0).toFixed(2)}</td>
+          <td>${it.batch || '--'}</td>
           <td class="num">${it.qty}</td>
-          <td class="num">${Number(it.rate || 0).toFixed(2)}</td>
-          <td class="num">${Number(it.sgst_amount || 0).toFixed(2)}</td>
-          <td class="num">${Number(it.cgst_amount || 0).toFixed(2)}</td>
+          <td class="num">${Number(it.mrp || 0).toFixed(2)}</td>
+          <td class="num">${Number(it.tax_amount || (Number(it.sgst_amount||0)+Number(it.cgst_amount||0))).toFixed(2)}</td>
           <td class="num">${Number(it.amount || 0).toFixed(2)}</td>`;
         tb.appendChild(tr);
       });

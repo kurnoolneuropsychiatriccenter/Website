@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Staff & Attendance</title>
+  <script src="js/auth.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Staff & Attendance</h1>
+      </div>
+      <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6 max-w-5xl">
+
+    <!-- Staff Master -->
+    <div class="bg-white p-6 rounded-lg shadow mb-6">
+      <h2 class="text-lg font-bold mb-4"><i class="fa fa-user-plus mr-2 text-blue-600"></i> Add Staff</h2>
+      <form onsubmit="addStaff(event)" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <input id="staffName" required placeholder="Staff Name" class="border px-3 py-2 rounded text-sm md:col-span-2" data-testid="staff-name-input">
+        <input id="staffRole" placeholder="Role (Nurse/Receptionist)" class="border px-3 py-2 rounded text-sm" data-testid="staff-role-input">
+        <input id="staffMobile" placeholder="Mobile" class="border px-3 py-2 rounded text-sm" data-testid="staff-mobile-input">
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700" data-testid="add-staff-btn"><i class="fa fa-save mr-1"></i> Add</button>
+      </form>
+    </div>
+
+    <!-- Attendance -->
+    <div class="bg-white p-6 rounded-lg shadow mb-6">
+      <h2 class="text-lg font-bold mb-4"><i class="fa fa-calendar-check mr-2 text-green-600"></i> Mark Attendance</h2>
+      <div class="mb-3 flex flex-wrap items-center gap-2">
+        <label class="text-sm">Date:</label>
+        <input type="date" id="attDate" class="border px-3 py-1.5 rounded text-sm" onchange="loadAttendance()" data-testid="att-date-input">
+        <button onclick="saveAttendance()" class="ml-auto bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700" data-testid="save-att-btn"><i class="fa fa-save mr-1"></i> Save Attendance</button>
+      </div>
+      <div id="staffList" class="space-y-2 divide-y" data-testid="staff-list"></div>
+    </div>
+
+    <!-- History -->
+    <div class="bg-white p-6 rounded-lg shadow">
+      <h2 class="text-lg font-bold mb-4"><i class="fa fa-history mr-2 text-purple-600"></i> Attendance History</h2>
+      <div class="flex flex-wrap gap-2 mb-3">
+        <input type="date" id="histFrom" class="border px-3 py-1.5 rounded text-sm">
+        <input type="date" id="histTo" class="border px-3 py-1.5 rounded text-sm">
+        <button onclick="loadHistory()" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700" data-testid="load-history-btn">Load</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left" data-testid="history-table">
+          <thead><tr class="bg-blue-50 text-blue-900 border-b text-sm"><th class="p-2">Date</th><th class="p-2">Staff</th><th class="p-2">Role</th><th class="p-2">Status</th></tr></thead>
+          <tbody id="histBody" class="divide-y text-sm"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allStaff = [];
+    async function loadStaff() {
+      const j = await (await fetch('/api/staff')).json();
+      allStaff = j.data || [];
+      loadAttendance();
+    }
+    async function addStaff(e) {
+      e.preventDefault();
+      const payload = { staff_name: staffName.value.trim(), role: staffRole.value.trim(), mobile: staffMobile.value.trim() };
+      const j = await (await fetch('/api/staff', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})).json();
+      if (j.success) { staffName.value=''; staffRole.value=''; staffMobile.value=''; loadStaff(); } else alert(j.message);
+    }
+    async function delStaff(id) {
+      if (!confirm('Remove staff?')) return;
+      const j = await (await fetch(`/api/staff/${id}`, {method:'DELETE'})).json();
+      if (j.success) loadStaff(); else alert(j.message);
+    }
+    async function loadAttendance() {
+      const date = document.getElementById('attDate').value;
+      const j = await (await fetch(`/api/staff/attendance?attendance_date=${date}`)).json();
+      const map = {};
+      (j.data || []).forEach(r => map[r.staff_id] = r.status);
+      const c = document.getElementById('staffList'); c.innerHTML = '';
+      if (!allStaff.length) { c.innerHTML = '<div class="text-gray-500 text-sm p-3">No staff added yet.</div>'; return; }
+      allStaff.forEach(s => {
+        const div = document.createElement('div');
+        const cur = map[s.id] || '';
+        div.className = 'flex items-center gap-2 py-2';
+        div.innerHTML = `
+          <div class="flex-1"><b>${s.staff_name}</b> <span class="text-xs text-gray-500">${s.role || ''} ${s.mobile ? '· ' + s.mobile : ''}</span></div>
+          <label class="text-sm"><input type="radio" name="att-${s.id}" value="Present" ${cur==='Present'?'checked':''} data-testid="att-present-${s.id}"> Present</label>
+          <label class="text-sm"><input type="radio" name="att-${s.id}" value="Absent" ${cur==='Absent'?'checked':''} data-testid="att-absent-${s.id}"> Absent</label>
+          <label class="text-sm"><input type="radio" name="att-${s.id}" value="Half-day" ${cur==='Half-day'?'checked':''}> Half-day</label>
+          <button onclick="delStaff(${s.id})" class="text-red-600 text-xs ml-2 hover:text-red-800" data-testid="delete-staff-${s.id}"><i class="fa fa-trash"></i></button>`;
+        c.appendChild(div);
+      });
+    }
+    async function saveAttendance() {
+      const date = document.getElementById('attDate').value;
+      const entries = allStaff.map(s => {
+        const sel = document.querySelector(`input[name="att-${s.id}"]:checked`);
+        return { staff_id: s.id, status: sel ? sel.value : 'Absent' };
+      });
+      const j = await (await fetch('/api/staff/attendance', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ attendance_date: date, entries })})).json();
+      alert(j.message || (j.success?'Saved':'Failed'));
+      loadHistory();
+    }
+    async function loadHistory() {
+      const from = document.getElementById('histFrom').value, to = document.getElementById('histTo').value;
+      if (!from || !to) return;
+      const j = await (await fetch(`/api/staff/attendance?from_date=${from}&to_date=${to}`)).json();
+      const tb = document.getElementById('histBody'); tb.innerHTML = '';
+      (j.data || []).forEach(r => {
+        const tr = document.createElement('tr');
+        const color = r.status==='Present'?'text-green-600':r.status==='Absent'?'text-red-600':'text-yellow-600';
+        tr.innerHTML = `<td class="p-2">${r.attendance_date}</td><td class="p-2">${r.staff_name}</td><td class="p-2">${r.role||''}</td><td class="p-2 font-semibold ${color}">${r.status}</td>`;
+        tb.appendChild(tr);
+      });
+      if (!tb.children.length) tb.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500">No records in this range.</td></tr>';
+    }
+    document.getElementById('attDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('histFrom').value = new Date().toISOString().split('T')[0];
+    document.getElementById('histTo').value = new Date().toISOString().split('T')[0];
+    loadStaff();
+  </script>
+</body>
+</html>
