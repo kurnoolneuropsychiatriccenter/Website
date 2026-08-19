@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 10 — validated the new Danger-Zone 2-step email-code + SMTP Email Setup batch. Backend: created /app/backend/tests/test_danger_zone_email.py (10 tests) covering GET /api/settings/smtp-status shape (no password leak), PUT /api/settings/smtp save + empty-pass-keeps-existing, POST /api/dev/request-danger-code reject paths (SMTP not configured -> 400, bad action -> 400, missing action -> 400), POST /api/dev/verify-danger-code unknown-key -> 400, legacy /api/dev/clear-demo-data + /api/dev/reset-all-data now return 403. Also updated the earlier /app/backend/tests/test_msg319_features.py so the clear-demo-data assertion now expects 403 (matches the new flow). Combined danger_zone + msg319 pytest run: 21/21 pass. Frontend Playwright on /settings.html: all new data-testids present (save-smtp-btn, test-smtp-btn, smtp-user-input, smtp-pass-input, smtp-host-input, smtp-port-input, clear-demo-btn, reset-all-btn, danger-code-modal). danger-code-modal starts hidden. With SMTP unconfigured, clicking Clear Demo -> confirm dialog -> alert 'SMTP not configured. Go to Settings -> Email Setup ...' -- modal stays hidden. With a stubbed fetch that fakes request-danger-code success, the modal opens, dangerSentTo renders 'shaikabuzarrahiman@gmail.com', typing 000000 + Confirm shows the red inline error 'No code was requested, or it has expired.' (class text-xs text-red-600) and the modal remains open; Resend button updates dangerCodeMsg to the blue info line. Regression: [data-testid=op-details-modal], [data-testid=bill-details-modal], [data-testid=lab-details-modal] still render on their respective history pages. Screenshot of settings.html shows Email Setup card visible, Danger Zone visible below it, modal hidden by default (per user request).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "settings.html Email Setup", "issues": ["Uses cdn.tailwindcss.com (dev-only). Warning printed by every page load. Not a blocker for a local clinic app but should be moved to a build-time Tailwind or CLI eventually."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_danger_zone_email.py",
+    "/app/backend/tests/test_msg319_features.py",
+    "/app/test_reports/pytest/danger_zone.xml"
+  ],
+  "action_items": [
+    "None required. All acceptance criteria for this iteration met."
+  ],
+  "critical_code_review_comments": [
+    "sendMail() creates a fresh nodemailer transporter per call - fine at this scale, but if SMTP is used heavily (e.g. many-per-minute) consider caching a transporter and invalidating it when PUT /api/settings/smtp changes any of host/port/user/pass.",
+    "dangerCodes is in-memory only. A server restart between STEP 1 and STEP 2 wipes the pending code with no user-facing hint beyond the generic 'No code was requested' - acceptable, but consider surfacing 'the server restarted, please request a new code' if you ever add server-restart detection.",
+    "The Node process rejects new codes but does not rate-limit request-danger-code. Someone with a valid session could spam the recovery Gmail. Consider a 60-second cooldown per action.",
+    "verify-danger-code checks entry.action !== action and returns 400 'Action mismatch'. Good. But bcrypt.compareSync of a wrong code returns 401 (correct); consider also incrementing a per-key wrong-attempt counter and consuming after N=5 to prevent brute force (6-digit space = 1M, at 100 req/s bruteable in ~3h).",
+    "server.js is now ~1881 lines - splitting the danger-zone + smtp block into /app/backend/routes/danger.js would help maintainability but not urgent.",
+    "PUT /api/settings/smtp does not validate host/port/user format. A typoed port ('foo') is stored verbatim; the sendMail parseInt will silently fallback to NaN. Consider Number.isInteger check."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_msg319_features.py (test_clear_demo_data_returns_success renamed to test_clear_demo_data_legacy_returns_403; asserts 403 now that the endpoint is gated)",
+    "/app/backend/tests/test_danger_zone_email.py (NEW - 10 tests for SMTP + danger-code endpoints)"
+  ],
+  "success_rate": {"backend": "100% (21/21 danger-zone + msg319 tests pass)", "frontend": "100% of critical FE checks (9/9: all testids present, modal-hidden-by-default, SMTP-unset alert path, stubbed-success modal path, wrong-code red error path, resend info path, 3 regression modals)"},
+  "test_credentials": "Login: admin123 | Delete: delete123 | Recovery email default: shaikabuzarrahiman@gmail.com",
+  "seed_data_creation": "None persisted. Test module snapshots + restores /api/settings/smtp on teardown. Post-test cleanup ran an explicit curl PUT to blank out host/user/pass so subsequent iterations start from configured=false.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Real Gmail SMTP creds are not available in this environment - the sendMail() code path can only be exercised via the SMTP_NOT_CONFIGURED early return (tested) or by a temporary in-process monkey-patch (not attempted). The wrong-code and no-code branches of /api/dev/verify-danger-code are fully covered (backend + FE). If you ever need to exercise the success branch end-to-end, either (a) provide real Gmail App Password in settings.smtp_pass, or (b) monkey-patch server.js sendMail() to fs.writeFileSync the code to /tmp/last-danger-code.txt and read it from the test - remember to revert the patch. Frontend fetch is wrapped by /js/auth.js which auto-injects the Bearer token from sessionStorage after the /login.html flow.",
+  "rca of the issue": "No functional issue found this iteration. All destructive endpoints now correctly require the 2-step email code, legacy endpoints return 403 with a helpful message, SMTP status never leaks the password, and empty-pass on PUT preserves the stored hash as required by the spec."
+}

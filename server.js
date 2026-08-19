@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1641,28 +1642,172 @@ app.get('/api/records/detailed', (req, res) => {
 });
 
 // =============================================================================
-// UTILITIES: clear demo data + developer reset + medicine lookup by code + patient pending
+// UTILITIES: DANGER-ZONE 2-STEP CODE + SMTP HELPERS + medicine lookup by code + patient pending
 // =============================================================================
 
-// Clear the previously-seeded demo doctors/patients/medicines (safe: only removes the exact demo rows if they still exist unmodified)
-app.post('/api/dev/clear-demo-data', (req, res) => {
-  db.serialize(() => {
-    db.run(`DELETE FROM doctors WHERE doctor_name IN ('Dr. K. Ramesh','Dr. S. Sujatha') AND (mobile IN ('9876543210','9876543211'))`);
-    db.run(`DELETE FROM patients WHERE patient_code IN ('KNC001000001','KNC001000002')`);
-    db.run(`DELETE FROM medicines WHERE medicine_name IN ('Paracetamol 650mg','Clonazepam 0.5mg') AND (batch_number IN ('B123','C456'))`);
+// One-time codes for destructive actions. Stored in-memory: { hash, action, expiresAt }.
+const dangerCodes = new Map();
+const DANGER_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+function newDangerCode() {
+  // Human-friendly 6-digit numeric code
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function sendMail({ to, subject, text }) {
+  const host = await getSetting('smtp_host');
+  const port = parseInt((await getSetting('smtp_port')) || '465', 10);
+  const user = await getSetting('smtp_user');
+  const pass = await getSetting('smtp_pass');
+  const fromName = (await getSetting('smtp_from_name')) || 'Kurnool Neuro Clinic';
+  if (!host || !user || !pass) {
+    const err = new Error('SMTP not configured. Go to Settings → Email Setup and fill in your Gmail address + App Password.');
+    err.code = 'SMTP_NOT_CONFIGURED';
+    throw err;
+  }
+  const transporter = nodemailer.createTransport({
+    host, port,
+    secure: port === 465,
+    auth: { user, pass }
   });
-  res.json({ success: true, message: 'Demo data cleared. Counts now reflect only the data YOU added.' });
+  await transporter.sendMail({
+    from: `"${fromName}" <${user}>`,
+    to, subject, text
+  });
+}
+
+// SMTP status (never leaks the password)
+app.get('/api/settings/smtp-status', async (req, res) => {
+  const host = await getSetting('smtp_host');
+  const user = await getSetting('smtp_user');
+  const pass = await getSetting('smtp_pass');
+  res.json({
+    success: true,
+    data: {
+      configured: !!(host && user && pass),
+      host: host || '',
+      port: (await getSetting('smtp_port')) || '465',
+      user: user || '',
+      from_name: (await getSetting('smtp_from_name')) || 'Kurnool Neuro Clinic'
+    }
+  });
 });
 
-// Full data reset: wipe transactional + master tables (requires delete password)
+// Save SMTP settings (Gmail: host=smtp.gmail.com, port=465, user=your@gmail.com, pass=App Password)
+app.put('/api/settings/smtp', async (req, res) => {
+  const { host, port, user, pass, from_name } = req.body || {};
+  if (host !== undefined) await setSetting('smtp_host', String(host));
+  if (port !== undefined) await setSetting('smtp_port', String(port || '465'));
+  if (user !== undefined) await setSetting('smtp_user', String(user));
+  if (pass !== undefined && pass) await setSetting('smtp_pass', String(pass));
+  if (from_name !== undefined) await setSetting('smtp_from_name', String(from_name || 'Kurnool Neuro Clinic'));
+  res.json({ success: true, message: 'Email settings saved.' });
+});
+
+// Send a test email to verify SMTP works
+app.post('/api/settings/smtp-test', async (req, res) => {
+  const to = (await getSetting('recovery_email')) || '';
+  if (!to) return res.status(400).json({ success: false, message: 'No recovery email is set. Save one first.' });
+  try {
+    await sendMail({
+      to,
+      subject: 'Kurnool Neuro Clinic — Test Email',
+      text: 'This is a test email from your Clinic Management System. If you can read this, email is working correctly.'
+    });
+    res.json({ success: true, message: `Test email sent to ${to}. Please check the Gmail inbox (or Spam folder).` });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// STEP 1: request a one-time code for a destructive action
+// body: { action: "clear_demo" | "reset_all" }
+app.post('/api/dev/request-danger-code', async (req, res) => {
+  const action = (req.body && req.body.action) || '';
+  if (!['clear_demo', 'reset_all'].includes(action)) {
+    return res.status(400).json({ success: false, message: 'Unknown action' });
+  }
+  const to = (await getSetting('recovery_email')) || '';
+  if (!to) return res.status(400).json({ success: false, message: 'No recovery email set. Save one in Settings first.' });
+
+  const code = newDangerCode();
+  const hash = bcrypt.hashSync(code, 8);
+  // Invalidate any older pending codes
+  for (const [k, v] of dangerCodes) if (v.action === action) dangerCodes.delete(k);
+  const key = crypto.randomBytes(8).toString('hex');
+  dangerCodes.set(key, { hash, action, expiresAt: Date.now() + DANGER_CODE_TTL_MS });
+
+  const label = action === 'clear_demo' ? 'Clear DEMO patients / doctors / medicines' : 'ERASE ALL DATA (start fresh)';
+  const subject = `Kurnool Neuro Clinic — Code to ${label}`;
+  const text =
+`Someone at the clinic just requested this action:
+
+    ${label}
+
+Your one-time code is:
+
+    ${code}
+
+Type this code inside the software within 15 minutes to complete the action.
+If you did NOT request this, IGNORE this email — no changes were made.
+
+— Kurnool Neuro Clinic Management System`;
+
+  try {
+    await sendMail({ to, subject, text });
+    res.json({
+      success: true,
+      message: `A 6-digit code has been emailed to ${to}. Please open Gmail and type the code in the software (valid 15 minutes).`,
+      data: { request_key: key, sent_to: to, action }
+    });
+  } catch (e) {
+    dangerCodes.delete(key);
+    if (e.code === 'SMTP_NOT_CONFIGURED') return res.status(400).json({ success: false, message: e.message });
+    res.status(500).json({ success: false, message: 'Could not send email: ' + e.message });
+  }
+});
+
+// STEP 2: verify the code and execute the destructive action
+// body: { request_key, code, action }
+app.post('/api/dev/verify-danger-code', (req, res) => {
+  const { request_key, code, action } = req.body || {};
+  const entry = dangerCodes.get(request_key);
+  if (!entry) return res.status(400).json({ success: false, message: 'No code was requested, or it has expired. Please request a new code.' });
+  if (entry.expiresAt < Date.now()) { dangerCodes.delete(request_key); return res.status(400).json({ success: false, message: 'This code has expired. Please request a new one.' }); }
+  if (entry.action !== action) return res.status(400).json({ success: false, message: 'Action mismatch. Please start again.' });
+  if (!code || !bcrypt.compareSync(String(code), entry.hash)) {
+    return res.status(401).json({ success: false, message: 'Wrong code. Please check the Gmail message and try again.' });
+  }
+  // consume the code
+  dangerCodes.delete(request_key);
+
+  if (action === 'clear_demo') {
+    db.serialize(() => {
+      db.run(`DELETE FROM doctors WHERE doctor_name IN ('Dr. K. Ramesh','Dr. S. Sujatha') AND (mobile IN ('9876543210','9876543211'))`);
+      db.run(`DELETE FROM patients WHERE patient_code IN ('KNC001000001','KNC001000002')`);
+      db.run(`DELETE FROM medicines WHERE medicine_name IN ('Paracetamol 650mg','Clonazepam 0.5mg') AND (batch_number IN ('B123','C456'))`);
+    });
+    return res.json({ success: true, message: 'Demo data cleared successfully.' });
+  }
+  if (action === 'reset_all') {
+    db.serialize(() => {
+      ['op_bills', 'medical_bills', 'medical_bill_items', 'lab_bills', 'lab_bill_items',
+       'purchases', 'purchase_items', 'medicine_returns', 'expenses',
+       'staff_attendance', 'staff', 'patients', 'doctors', 'medicines',
+       'op_token_counter'].forEach(t => db.run(`DELETE FROM ${t}`, () => {}));
+    });
+    return res.json({ success: true, message: 'All data has been erased. Only settings + passwords are preserved.' });
+  }
+  res.status(400).json({ success: false, message: 'Unknown action' });
+});
+
+// LEGACY endpoints — kept for backward compatibility BUT now guarded by the danger-code flow.
+// They will refuse to run without the two-step verification above.
+app.post('/api/dev/clear-demo-data', (req, res) => {
+  res.status(403).json({ success: false, message: 'This action now requires a one-time email code. Please use the button in Settings → Danger Zone.' });
+});
 app.post('/api/dev/reset-all-data', (req, res) => {
-  db.serialize(() => {
-    ['op_bills', 'medical_bills', 'medical_bill_items', 'lab_bills', 'lab_bill_items',
-     'purchases', 'purchase_items', 'medicine_returns', 'expenses',
-     'staff_attendance', 'staff', 'patients', 'doctors', 'medicines',
-     'op_token_counter'].forEach(t => db.run(`DELETE FROM ${t}`, () => {}));
-  });
-  res.json({ success: true, message: 'All data has been erased. Only settings + passwords are preserved.' });
+  res.status(403).json({ success: false, message: 'This action now requires a one-time email code. Please use the button in Settings → Danger Zone.' });
 });
 
 // Lookup medicine by product_code for Purchase quick-add

@@ -59,13 +59,79 @@
       </div>
     </div>
 
+    <!-- Email Setup (needed for Danger Zone codes) -->
+    <div class="bg-white rounded-lg shadow p-6 border-l-4 border-indigo-500">
+      <h2 class="text-lg font-bold text-gray-800 mb-3"><i class="fa fa-envelope-open-text mr-2 text-indigo-600"></i> Email Setup <span class="text-sm font-normal text-gray-500">— one-time setup for security codes</span></h2>
+      <p class="text-xs text-gray-600 mb-3">This lets the software send a security code to your recovery email (<b id="smtpTargetEmail">--</b>) whenever someone tries to delete records from the Danger Zone. <b>Without this, the delete buttons will refuse to work.</b></p>
+      <div class="text-xs bg-indigo-50 border border-indigo-200 rounded p-3 mb-3">
+        <p class="font-semibold mb-1">How to fill this in (one time only):</p>
+        <ol class="list-decimal ml-4 space-y-0.5">
+          <li>Open <b>Gmail</b> on any browser → click your profile picture → <b>Manage your Google Account</b>.</li>
+          <li>Go to <b>Security</b> → make sure <b>2-Step Verification</b> is ON.</li>
+          <li>Below that click <b>App passwords</b> → give it a name like "Clinic PC" → Google will show a 16-letter password.</li>
+          <li>Copy the 16-letter password and paste it below along with your Gmail address. Click Save.</li>
+          <li>Then click <b>Send Test Email</b> below to make sure it works.</li>
+        </ol>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium mb-1">Sender Gmail Address</label>
+          <input type="email" id="smtpUser" placeholder="yourname@gmail.com" class="w-full border rounded px-3 py-2 text-sm" data-testid="smtp-user-input">
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">Gmail App Password (16 letters, no spaces)</label>
+          <input type="password" id="smtpPass" placeholder="Leave blank to keep the saved one" class="w-full border rounded px-3 py-2 text-sm" data-testid="smtp-pass-input">
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">SMTP Host</label>
+          <input type="text" id="smtpHost" value="smtp.gmail.com" class="w-full border rounded px-3 py-2 text-sm" data-testid="smtp-host-input">
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">SMTP Port</label>
+          <input type="number" id="smtpPort" value="465" class="w-full border rounded px-3 py-2 text-sm" data-testid="smtp-port-input">
+        </div>
+      </div>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <button onclick="saveSmtp()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="save-smtp-btn"><i class="fa fa-save mr-1"></i> Save Email Setup</button>
+        <button onclick="testSmtp()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="test-smtp-btn"><i class="fa fa-paper-plane mr-1"></i> Send Test Email</button>
+        <span id="smtpStatus" class="text-xs ml-2"></span>
+      </div>
+    </div>
+
     <!-- Danger zone -->
     <div class="bg-red-50 rounded-lg shadow p-6 border-l-4 border-red-500">
       <h2 class="text-lg font-bold text-gray-800 mb-3"><i class="fa fa-triangle-exclamation mr-2 text-red-600"></i> Danger Zone</h2>
-      <p class="text-xs text-gray-600 mb-3">These actions cannot be undone. Take a backup first.</p>
+      <p class="text-xs text-gray-600 mb-3">These actions cannot be undone. To protect against accidents, a <b>6-digit security code</b> will be emailed to your recovery Gmail (<span id="dangerEmail">--</span>) — you must open that email and type the code below. Take a backup before proceeding.</p>
       <div class="flex flex-wrap gap-3">
-        <button onclick="clearDemo()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="clear-demo-btn"><i class="fa fa-broom mr-1"></i> Clear Demo Patients / Doctors / Medicines</button>
-        <button onclick="resetAll()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="reset-all-btn"><i class="fa fa-trash mr-1"></i> Erase ALL Data (Start Fresh)</button>
+        <button onclick="requestDangerCode('clear_demo')" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="clear-demo-btn"><i class="fa fa-broom mr-1"></i> Clear Demo Patients / Doctors / Medicines</button>
+        <button onclick="requestDangerCode('reset_all')" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="reset-all-btn"><i class="fa fa-trash mr-1"></i> Erase ALL Data (Start Fresh)</button>
+      </div>
+    </div>
+
+    <!-- Danger code modal -->
+    <div id="dangerCodeModal" class="fixed inset-0 bg-black bg-opacity-60 z-50 hidden items-center justify-center p-4" data-testid="danger-code-modal">
+      <div class="bg-white rounded-lg shadow-2xl w-full max-w-md">
+        <div class="border-b bg-red-700 text-white px-5 py-3 rounded-t-lg flex justify-between items-center">
+          <h3 class="font-bold"><i class="fa fa-shield-halved mr-2"></i> Confirm with Email Code</h3>
+          <button onclick="closeDangerModal()" class="text-white text-2xl leading-none">&times;</button>
+        </div>
+        <div class="p-5 text-sm space-y-3">
+          <p>We just sent a <b>6-digit code</b> to:</p>
+          <p class="font-mono bg-gray-100 border rounded px-3 py-2" id="dangerSentTo">--</p>
+          <p class="text-xs text-gray-500">Open Gmail on any device, find the email titled "Kurnool Neuro Clinic — Code…", and type the 6 numbers below. The code stops working after 15 minutes.</p>
+          <div>
+            <label class="block text-xs font-medium mb-1">Enter the 6-digit code</label>
+            <input type="text" id="dangerCodeInput" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" placeholder="e.g. 123456" class="w-full border-2 border-red-400 rounded px-3 py-3 text-center text-2xl font-mono tracking-widest" data-testid="danger-code-input" autofocus>
+          </div>
+          <p id="dangerCodeMsg" class="text-xs"></p>
+        </div>
+        <div class="border-t px-5 py-3 flex justify-between">
+          <button onclick="resendDangerCode()" class="text-xs text-blue-600 hover:underline" data-testid="resend-danger-btn">Didn't receive it? Resend</button>
+          <div class="space-x-2">
+            <button onclick="closeDangerModal()" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded text-sm">Cancel</button>
+            <button onclick="submitDangerCode()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="submit-danger-btn"><i class="fa fa-check mr-1"></i> Confirm &amp; Execute</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -122,26 +188,103 @@
       if (j.success) {
         document.getElementById('recoveryCode').textContent = j.data.recovery_code || '(not set)';
         document.getElementById('recEmail').value = j.data.recovery_email || '';
+        document.getElementById('dangerEmail').textContent = j.data.recovery_email || '(not set)';
+        document.getElementById('smtpTargetEmail').textContent = j.data.recovery_email || '(not set)';
       }
+      await loadSmtp();
+    }
+    async function loadSmtp() {
+      const j = await (await fetch('/api/settings/smtp-status')).json();
+      if (!j.success) return;
+      document.getElementById('smtpUser').value = j.data.user || '';
+      document.getElementById('smtpHost').value = j.data.host || 'smtp.gmail.com';
+      document.getElementById('smtpPort').value = j.data.port || '465';
+      const st = document.getElementById('smtpStatus');
+      st.textContent = j.data.configured ? '✔ Email is set up' : '⚠ Not set up yet';
+      st.className = 'text-xs ml-2 ' + (j.data.configured ? 'text-green-700' : 'text-red-700');
+    }
+    async function saveSmtp() {
+      const payload = {
+        host: document.getElementById('smtpHost').value.trim(),
+        port: document.getElementById('smtpPort').value.trim() || '465',
+        user: document.getElementById('smtpUser').value.trim(),
+        pass: document.getElementById('smtpPass').value,
+        from_name: 'Kurnool Neuro Clinic'
+      };
+      const j = await (await fetch('/api/settings/smtp', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })).json();
+      alert(j.message || (j.success ? 'Saved' : 'Failed'));
+      document.getElementById('smtpPass').value = '';
+      loadSmtp();
+    }
+    async function testSmtp() {
+      document.getElementById('smtpStatus').textContent = 'Sending test email...';
+      const j = await (await fetch('/api/settings/smtp-test', { method: 'POST' })).json();
+      alert(j.message || (j.success ? 'Sent' : 'Failed'));
+      loadSmtp();
     }
     async function saveEmails() {
       const recovery_email = document.getElementById('recEmail').value.trim();
       const j = await (await fetch('/api/settings', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ recovery_email }) })).json();
       alert(j.success ? 'Saved.' : (j.message || 'Failed'));
+      loadGst();
     }
-    async function clearDemo() {
-      if (!confirm('Remove the two sample doctors, two sample patients and two sample medicines that came with the software?')) return;
-      const j = await (await fetch('/api/dev/clear-demo-data', { method: 'POST' })).json();
-      alert(j.message || (j.success ? 'Done' : 'Failed'));
+
+    // ------- Danger Zone two-step flow -------
+    let _dangerCtx = null; // { action, request_key }
+    async function requestDangerCode(action) {
+      const label = action === 'clear_demo' ? 'clear the DEMO patients/doctors/medicines' : 'ERASE ALL DATA';
+      if (!confirm(`You are about to ${label}. A 6-digit code will be emailed to your recovery Gmail. Continue?`)) return;
+      const j = await (await fetch('/api/dev/request-danger-code', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action })
+      })).json();
+      if (!j.success) { alert(j.message); return; }
+      _dangerCtx = { action, request_key: j.data.request_key };
+      document.getElementById('dangerSentTo').textContent = j.data.sent_to;
+      document.getElementById('dangerCodeInput').value = '';
+      document.getElementById('dangerCodeMsg').textContent = '';
+      const m = document.getElementById('dangerCodeModal');
+      m.classList.remove('hidden'); m.classList.add('flex');
+      setTimeout(() => document.getElementById('dangerCodeInput').focus(), 100);
     }
-    async function resetAll() {
-      if (!confirm('This will DELETE ALL patients, bills, medicines, purchases, expenses, staff and returns. Only your passwords and settings stay. Have you taken a backup?')) return;
-      if (!confirm('Really erase EVERYTHING? Type OK on the next prompt.')) return;
-      const check = prompt('Type ERASE in capitals to confirm:');
-      if (check !== 'ERASE') return;
-      const j = await (await fetch('/api/dev/reset-all-data', { method: 'POST' })).json();
-      alert(j.message || 'Done');
+    async function resendDangerCode() {
+      if (!_dangerCtx) return;
+      const j = await (await fetch('/api/dev/request-danger-code', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action: _dangerCtx.action })
+      })).json();
+      if (!j.success) { alert(j.message); return; }
+      _dangerCtx.request_key = j.data.request_key;
+      document.getElementById('dangerSentTo').textContent = j.data.sent_to;
+      document.getElementById('dangerCodeMsg').textContent = 'A new code was emailed. Older code no longer works.';
+      document.getElementById('dangerCodeMsg').className = 'text-xs text-blue-700';
     }
+    async function submitDangerCode() {
+      if (!_dangerCtx) return;
+      const code = document.getElementById('dangerCodeInput').value.trim();
+      if (!/^[0-9]{6}$/.test(code)) {
+        document.getElementById('dangerCodeMsg').textContent = 'Please type all 6 digits.';
+        document.getElementById('dangerCodeMsg').className = 'text-xs text-red-600';
+        return;
+      }
+      const j = await (await fetch('/api/dev/verify-danger-code', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ request_key: _dangerCtx.request_key, action: _dangerCtx.action, code })
+      })).json();
+      if (!j.success) {
+        document.getElementById('dangerCodeMsg').textContent = j.message;
+        document.getElementById('dangerCodeMsg').className = 'text-xs text-red-600';
+        return;
+      }
+      closeDangerModal();
+      alert(j.message);
+    }
+    function closeDangerModal() {
+      const m = document.getElementById('dangerCodeModal');
+      m.classList.add('hidden'); m.classList.remove('flex');
+      _dangerCtx = null;
+    }
+
     async function regenRecovery() {
       if (!confirm('Generate a NEW recovery code? Your old code will stop working.')) return;
       const j = await (await fetch('/api/auth/regenerate-recovery-code', { method: 'POST' })).json();

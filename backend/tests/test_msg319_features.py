@@ -26,13 +26,13 @@ def sess():
     return s
 
 
-# ---------- 1. clear-demo-data ----------
-def test_clear_demo_data_returns_success(sess):
+# ---------- 1. clear-demo-data (legacy — now 403, gated by new danger-code flow) ----------
+def test_clear_demo_data_legacy_returns_403(sess):
     r = sess.post(f"{BASE_URL}/api/dev/clear-demo-data", json={})
-    assert r.status_code == 200
+    assert r.status_code == 403
     j = r.json()
-    assert j.get("success") is True
-    assert "Demo data cleared" in j.get("message", "")
+    assert j.get("success") is False
+    assert "one-time email code" in j.get("message", "")
 
 
 # ---------- 2. settings backfill ----------

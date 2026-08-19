@@ -34,7 +34,20 @@ Build a working full-stack Clinic Management System for **Kurnool Neuro Psychiat
 - Daily Expenses, Staff Attendance modules.
 - Refactored all print templates to A4.
 
-### Session 9 — Msg 319 batch (Feb 19, 2026 — this iteration)
+### Session 10 — Danger Zone Email Gate (Feb 19, 2026)
+- **Destructive actions now require a 6-digit code emailed via Gmail SMTP** to `settings.recovery_email` (`shaikabuzarrahiman@gmail.com`). Staff can no longer accidentally wipe the DB by clicking a button.
+- New backend endpoints:
+  - `GET /api/settings/smtp-status` — returns whether email is configured (never leaks the password).
+  - `PUT /api/settings/smtp` — save host/port/user/pass/from_name; empty pass keeps existing.
+  - `POST /api/settings/smtp-test` — sends a test email to the recovery inbox.
+  - `POST /api/dev/request-danger-code` — body `{action}`; generates a bcrypt-hashed 6-digit code (15-min TTL), emails it, returns `request_key`.
+  - `POST /api/dev/verify-danger-code` — body `{request_key, code, action}`; on success executes the destructive action and consumes the code.
+  - Legacy `POST /api/dev/clear-demo-data` and `/api/dev/reset-all-data` now return 403 with a helpful redirect message.
+- New nodemailer dependency (`^9.0.5`) in `package.json`.
+- `settings.html` gains an **Email Setup** card with step-by-step Gmail App Password instructions and a **Danger Code modal** for typing the 6-digit code.
+- Tests: `/app/backend/tests/test_danger_zone_email.py` (10 tests) + updated `test_msg319_features.py`. 21/21 pass. Report `/app/test_reports/iteration_10.json`.
+
+### Session 9 — Msg 319 batch (Feb 19, 2026)
 - **1. Bill Details Modal** — clicking any bill_no on `ophistory.html`, `medicalbillhistory.html`, or `labbillhistory.html` opens a modal with all line items, subtotal, discount (hidden if zero), and grand total. Modal Print button jumps to the corresponding print page. `data-testid`s: `op-details-modal`, `bill-details-modal`, `lab-details-modal`.
 - **2. Clear Demo Data endpoint** — `POST /api/dev/clear-demo-data` removes the 2 seeded demo doctors / patients / medicines only (idempotent).
 - **3. Product Code lookup** — `GET /api/medicines/code/:code` returns the medicine by product_code (or exact name). Purchase.html now has a `Prod Code` input per row that auto-fills the medicine dropdown + HSN + MRP + rate + batch + expiry via this endpoint. Medicine master (`medicines.html`) now has a Product Code input and a Code column.
