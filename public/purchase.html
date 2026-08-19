@@ -54,6 +54,7 @@
             <thead>
               <tr class="bg-blue-50 text-blue-900 border-b">
                 <th class="p-2 w-8">S.No</th>
+                <th class="p-2">Prod Code</th>
                 <th class="p-2">Qty</th>
                 <th class="p-2">Package</th>
                 <th class="p-2">Product</th>
@@ -111,9 +112,10 @@
       const tr = document.createElement('tr');
       tr.id = rid;
       let opt = '<option value="">Select</option>';
-      allMedicines.forEach(m => opt += `<option value="${m.id}" data-hsn="${m.hsn_number||''}">${m.medicine_name}</option>`);
+      allMedicines.forEach(m => opt += `<option value="${m.id}" data-hsn="${m.hsn_number||''}" data-code="${m.product_code||''}">${m.medicine_name}${m.product_code ? ' ('+m.product_code+')' : ''}</option>`);
       tr.innerHTML = `
         <td class="p-1 sno-cell font-semibold">1</td>
+        <td class="p-1"><input type="text" placeholder="Code" class="border w-20 px-1 py-1 rounded pcode" onchange="onCode('${rid}')" data-testid="pur-code"></td>
         <td class="p-1"><input type="number" min="0" step="0.01" value="1" class="border w-16 px-1 py-1 rounded qty" oninput="calc('${rid}')" required data-testid="pur-qty"></td>
         <td class="p-1"><input type="text" placeholder="10*10" class="border w-20 px-1 py-1 rounded pack" data-testid="pur-pack"></td>
         <td class="p-1"><select class="border w-40 px-1 py-1 rounded med" onchange="onMed('${rid}')" required data-testid="pur-med">${opt}</select></td>
@@ -137,6 +139,39 @@
       const opt = sel.options[sel.selectedIndex];
       if (opt.value) tr.querySelector('.hsn').value = opt.getAttribute('data-hsn') || '';
       calc(rid);
+    }
+
+    async function onCode(rid) {
+      const tr = document.getElementById(rid);
+      const code = (tr.querySelector('.pcode').value || '').trim();
+      if (!code) return;
+      try {
+        const r = await fetch(`/api/medicines/code/${encodeURIComponent(code)}`);
+        const j = await r.json();
+        if (!j.success) { alert('No medicine found for code "' + code + '". Please add it in the Medicines master first.'); return; }
+        const m = j.data;
+        // ensure the medicine appears in the dropdown (it always does since we load all medicines up-front)
+        const sel = tr.querySelector('.med');
+        let matched = false;
+        for (let i = 0; i < sel.options.length; i++) {
+          if (String(sel.options[i].value) === String(m.id)) { sel.selectedIndex = i; matched = true; break; }
+        }
+        if (!matched) {
+          // rare fallback: add the option on the fly
+          const o = document.createElement('option');
+          o.value = m.id; o.textContent = m.medicine_name;
+          o.setAttribute('data-hsn', m.hsn_number || '');
+          sel.appendChild(o); sel.value = m.id;
+        }
+        tr.querySelector('.hsn').value = m.hsn_number || '';
+        tr.querySelector('.mrp').value = m.mrp || 0;
+        tr.querySelector('.rate').value = m.rate || 0;
+        if (m.batch_number) tr.querySelector('.batch').value = m.batch_number;
+        if (m.expiry_date) tr.querySelector('.expiry').value = m.expiry_date;
+        calc(rid);
+      } catch (e) {
+        alert('Lookup error: ' + e.message);
+      }
     }
     function calc(rid) {
       const tr = document.getElementById(rid);

@@ -46,6 +46,21 @@
     </div>
   </div>
 
+  <!-- Lab Bill Details Modal -->
+  <div id="labDetailsModal" class="fixed inset-0 z-50 hidden bg-black bg-opacity-50 items-center justify-center p-4" data-testid="lab-details-modal">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b px-5 py-3 bg-blue-900 text-white rounded-t-lg">
+        <h3 class="text-lg font-bold"><i class="fa fa-flask mr-2"></i> Lab Bill Details</h3>
+        <button onclick="closeLabModal()" class="text-white text-2xl leading-none hover:text-red-300" data-testid="close-lab-modal-btn">&times;</button>
+      </div>
+      <div id="labModalBody" class="p-5 text-sm text-gray-800">Loading...</div>
+      <div class="border-t px-5 py-3 flex justify-end space-x-2">
+        <button onclick="closeLabModal()" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded text-sm">Close</button>
+        <a id="labModalPrintLink" href="#" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm" data-testid="modal-print-lab-btn"><i class="fa fa-print mr-1"></i> Print</a>
+      </div>
+    </div>
+  </div>
+
   <script>
     async function load() {
       const today = document.getElementById('todayFilter').checked;
@@ -61,7 +76,7 @@
         j.data.forEach(b => {
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td class="p-3 font-semibold text-blue-600">${b.bill_no}</td>
+            <td class="p-3 font-semibold text-blue-600"><a href="#" onclick="showLabDetails(${b.id});return false;" class="hover:underline" data-testid="open-lab-details-${b.id}">${b.bill_no}</a></td>
             <td class="p-3">${b.invoice_no || '-'}</td>
             <td class="p-3">${b.bill_date}</td>
             <td class="p-3 font-medium">${b.patient_code || '-'}</td>
@@ -71,6 +86,7 @@
             <td class="p-3 text-red-600">₹${Number(b.discount_amount || 0).toFixed(2)}</td>
             <td class="p-3 font-bold text-green-700">₹${Number(b.grand_total || 0).toFixed(2)}</td>
             <td class="p-3 text-center space-x-2">
+              <button onclick="showLabDetails(${b.id})" class="text-gray-600 hover:text-blue-800" title="View Details" data-testid="view-lab-${b.id}"><i class="fa fa-eye"></i></button>
               <a href="labbillprint.html?id=${b.id}" target="_blank" class="text-blue-600 hover:text-blue-800" title="Print" data-testid="print-lab-${b.id}"><i class="fa fa-print"></i></a>
               <button onclick="del(${b.id})" class="text-red-600 hover:text-red-800" title="Delete" data-testid="delete-lab-${b.id}"><i class="fa fa-trash"></i></button>
             </td>`;
@@ -86,6 +102,66 @@
       const j = await r.json();
       if (j.success) { alert('Deleted.'); load(); } else alert(j.message);
     }
+
+    async function showLabDetails(id) {
+      const modal = document.getElementById('labDetailsModal');
+      const body = document.getElementById('labModalBody');
+      const printLink = document.getElementById('labModalPrintLink');
+      body.innerHTML = '<p class="text-gray-500">Loading...</p>';
+      printLink.href = `labbillprint.html?id=${id}`;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      try {
+        const r = await fetch(`/api/labbill/print/${id}`);
+        const j = await r.json();
+        if (!j.success) { body.innerHTML = `<p class="text-red-600">${j.message}</p>`; return; }
+        const d = j.data;
+        const itemsRows = (d.items || []).map((it, i) => `
+          <tr class="border-b">
+            <td class="p-2">${i+1}</td>
+            <td class="p-2">${it.test_name || '-'}</td>
+            <td class="p-2 text-right">₹${Number(it.rate||0).toFixed(2)}</td>
+            <td class="p-2 text-right font-semibold">₹${Number(it.amount||0).toFixed(2)}</td>
+          </tr>`).join('');
+        const discLabel = (Number(d.discount_amount||0) > 0)
+          ? `<div class="flex justify-between"><span>Discount (${d.discount_percent||0}%):</span><span class="text-red-600">− ₹${Number(d.discount_amount||0).toFixed(2)}</span></div>` : '';
+        body.innerHTML = `
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div><span class="text-gray-500">Bill No:</span> <b class="text-blue-700">${d.bill_no}</b></div>
+            <div><span class="text-gray-500">Invoice No:</span> ${d.invoice_no || '-'}</div>
+            <div><span class="text-gray-500">Date:</span> ${d.bill_date}</div>
+            <div><span class="text-gray-500">Patient Code:</span> <b>${d.patient_code || '-'}</b></div>
+            <div><span class="text-gray-500">Patient Name:</span> ${d.patient_name || d.patient_name_snapshot || '-'}</div>
+            <div><span class="text-gray-500">Mobile:</span> ${d.mobile || d.patient_phone_snapshot || '-'}</div>
+            <div><span class="text-gray-500">Referred By:</span> ${d.referred_by_name || '-'} ${d.referred_by_qual ? '('+d.referred_by_qual+')' : ''}</div>
+            <div><span class="text-gray-500">Notes:</span> ${d.notes || '-'}</div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border">
+              <thead class="bg-blue-50 text-blue-900">
+                <tr><th class="p-2 text-left">S.No</th><th class="p-2 text-left">Test Name</th><th class="p-2 text-right">Rate</th><th class="p-2 text-right">Amount</th></tr>
+              </thead>
+              <tbody>${itemsRows || '<tr><td colspan="4" class="p-3 text-center text-gray-500">No items</td></tr>'}</tbody>
+            </table>
+          </div>
+          <div class="border-t mt-3 pt-3 space-y-1 max-w-xs ml-auto">
+            <div class="flex justify-between"><span>Sub Total:</span><span>₹${Number(d.subtotal||0).toFixed(2)}</span></div>
+            ${discLabel}
+            <div class="flex justify-between text-lg font-bold border-t pt-2"><span>Grand Total:</span><span class="text-green-700">₹${Number(d.grand_total||0).toFixed(2)}</span></div>
+          </div>
+        `;
+      } catch (e) {
+        body.innerHTML = `<p class="text-red-600">Error loading details: ${e.message}</p>`;
+      }
+    }
+    function closeLabModal() {
+      const m = document.getElementById('labDetailsModal');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    }
+    document.getElementById('labDetailsModal').addEventListener('click', (e) => {
+      if (e.target.id === 'labDetailsModal') closeLabModal();
+    });
     document.getElementById('fromDate').value = new Date().toISOString().split('T')[0];
     document.getElementById('toDate').value = new Date().toISOString().split('T')[0];
     load();

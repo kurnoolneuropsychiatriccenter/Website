@@ -19,13 +19,10 @@
     </div>
   </header>
 
-  <div class="container mx-auto px-4 py-6 max-w-4xl">
-
+  <div class="container mx-auto px-4 py-6 max-w-6xl">
     <div class="bg-white p-6 rounded-lg shadow mb-6">
-      <h2 class="text-lg font-bold mb-4"><i class="fa fa-rotate-left mr-2 text-red-500"></i> New Return</h2>
-
       <div class="mb-4 flex gap-4 text-sm">
-        <label class="flex items-center gap-1"><input type="radio" name="returnType" value="patient" checked onchange="onTypeChange()" data-testid="return-type-patient"> <b>Patient Return</b> (medicine goes BACK to stock)</label>
+        <label class="flex items-center gap-1"><input type="radio" name="returnType" value="patient" checked onchange="onTypeChange()" data-testid="return-type-patient"> <b>Patient Return</b> (stock INCREASES)</label>
         <label class="flex items-center gap-1"><input type="radio" name="returnType" value="supplier" onchange="onTypeChange()" data-testid="return-type-supplier"> <b>Supplier Return</b> (stock DECREASES)</label>
       </div>
 
@@ -46,15 +43,22 @@
         <div><label class="block text-xs font-medium mb-1">Supplier Name</label><input id="supplier" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-input"></div>
       </div>
 
-      <form onsubmit="save(event)" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-        <div>
-          <label class="block text-xs font-medium mb-1">Medicine *</label>
-          <select id="medicine" required class="w-full border px-3 py-2 rounded text-sm" onchange="onMed()" data-testid="medicine-select"><option value="">Select</option></select>
+      <form onsubmit="save(event)">
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="text-md font-bold">Return Items</h3>
+          <button type="button" onclick="addRow()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700" data-testid="add-more-return-btn"><i class="fa fa-plus mr-1"></i> Add More Medicine</button>
         </div>
-        <div><label class="block text-xs font-medium mb-1">Batch</label><input id="batch" class="w-full border px-3 py-2 rounded text-sm" data-testid="batch-input"></div>
-        <div><label class="block text-xs font-medium mb-1">Qty *</label><input id="qty" type="number" min="1" step="1" required class="w-full border px-3 py-2 rounded text-sm" data-testid="qty-input"><p id="stockHint" class="text-[10px] text-gray-500 mt-1"></p></div>
-        <div><label class="block text-xs font-medium mb-1">Reason</label><input id="reason" placeholder="Expired / Damaged / Not needed" class="w-full border px-3 py-2 rounded text-sm" data-testid="reason-input"></div>
-        <div><button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="save-return-btn"><i class="fa fa-save mr-1"></i> Save Return</button></div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs" data-testid="return-items-table">
+            <thead><tr class="bg-blue-50 text-blue-900 border-b">
+              <th class="p-2 w-8">S.No</th><th class="p-2">Medicine</th><th class="p-2">Batch</th><th class="p-2">Qty</th><th class="p-2">Reason</th><th class="p-2 w-8"></th>
+            </tr></thead>
+            <tbody id="rowsBody" class="divide-y"></tbody>
+          </table>
+        </div>
+        <div class="flex justify-end mt-4">
+          <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded font-medium" data-testid="save-return-btn"><i class="fa fa-save mr-1"></i> Save Return</button>
+        </div>
       </form>
     </div>
 
@@ -73,8 +77,7 @@
     let meds = [];
     async function init() {
       meds = (await (await fetch('/api/medicines')).json()).data || [];
-      const sel = document.getElementById('medicine');
-      meds.forEach(m => { const o=document.createElement('option'); o.value=m.id; o.dataset.stock=m.current_stock||0; o.dataset.batch=m.batch_number||''; o.innerText=`${m.medicine_name} [Stock:${m.current_stock||0}]`; sel.appendChild(o); });
+      addRow();
       loadHistory();
     }
     function onTypeChange() {
@@ -86,33 +89,65 @@
       const c = document.getElementById('patientCode').value.trim(); if (!c) return;
       const j = await (await fetch(`/api/patients/code/${encodeURIComponent(c)}`)).json();
       if (j.success && j.data) { document.getElementById('patientId').value=j.data.id; document.getElementById('patientName').value=j.data.patient_name||''; document.getElementById('patientPhone').value=j.data.mobile||''; }
-      else { alert('Patient not found'); document.getElementById('patientId').value=''; document.getElementById('patientName').value=''; document.getElementById('patientPhone').value=''; }
+      else { alert('Patient not found'); }
     }
-    function onMed() {
-      const sel = document.getElementById('medicine');
-      const opt = sel.options[sel.selectedIndex];
-      document.getElementById('batch').value = opt.dataset.batch || '';
-      document.getElementById('stockHint').innerText = opt.value ? ('Current stock: ' + (opt.dataset.stock||0)) : '';
+    function addRow() {
+      const tbody = document.getElementById('rowsBody');
+      const rid = 'r' + Date.now() + Math.floor(Math.random()*999);
+      let opt = '<option value="">Select</option>';
+      meds.forEach(m => opt += `<option value="${m.id}" data-stock="${m.current_stock||0}" data-batch="${m.batch_number||''}">${m.medicine_name} [Stock:${m.current_stock||0}]</option>`);
+      const tr = document.createElement('tr'); tr.id = rid;
+      tr.innerHTML = `
+        <td class="p-1 sno-cell font-semibold">1</td>
+        <td class="p-1"><select class="border px-1 py-1 rounded text-xs w-52 med" required onchange="onMed('${rid}')" data-testid="ret-med-select">${opt}</select></td>
+        <td class="p-1"><input type="text" class="border px-1 py-1 rounded text-xs w-24 batch" data-testid="ret-batch-input"></td>
+        <td class="p-1"><input type="number" min="1" step="1" required class="border px-1 py-1 rounded text-xs w-16 qty" data-testid="ret-qty-input"><div class="text-[10px] text-gray-500 stock-hint"></div></td>
+        <td class="p-1"><input type="text" class="border px-1 py-1 rounded text-xs w-36 reason" placeholder="Expired / Damaged / Not needed" data-testid="ret-reason-input"></td>
+        <td class="p-1 text-center"><button type="button" onclick="rm('${rid}')" class="text-red-600 hover:text-red-800" data-testid="ret-remove-btn"><i class="fa fa-trash"></i></button></td>`;
+      tbody.appendChild(tr);
+      renum();
+    }
+    function renum() { document.querySelectorAll('#rowsBody tr').forEach((t,i)=>t.querySelector('.sno-cell').innerText=i+1); }
+    function onMed(rid) {
+      const tr = document.getElementById(rid);
+      const opt = tr.querySelector('.med').options[tr.querySelector('.med').selectedIndex];
+      tr.querySelector('.batch').value = opt.dataset.batch || '';
+      tr.querySelector('.stock-hint').innerText = opt.value ? 'stock: ' + (opt.dataset.stock||0) : '';
+    }
+    function rm(rid) {
+      if (document.querySelectorAll('#rowsBody tr').length <= 1) { alert('At least one row is required.'); return; }
+      document.getElementById(rid).remove(); renum();
     }
     async function save(e) {
       e.preventDefault();
       const t = document.querySelector('input[name="returnType"]:checked').value;
-      const payload = {
-        medicine_id: document.getElementById('medicine').value,
-        batch: document.getElementById('batch').value,
-        qty: parseFloat(document.getElementById('qty').value) || 0,
-        reason: document.getElementById('reason').value,
-        return_type: t
-      };
-      if (t === 'patient') {
-        if (!document.getElementById('patientId').value) { alert('Load patient by code first.'); return; }
-        payload.patient_id = document.getElementById('patientId').value;
-      } else {
-        payload.supplier = document.getElementById('supplier').value;
+      const supplier = document.getElementById('supplier').value;
+      const patient_id = document.getElementById('patientId').value;
+      if (t === 'patient' && !patient_id) { alert('Please load patient by code first.'); return; }
+
+      const rows = Array.from(document.querySelectorAll('#rowsBody tr'));
+      let anyFailed = false, savedCount = 0;
+      for (const tr of rows) {
+        const medicine_id = tr.querySelector('.med').value;
+        const qty = parseFloat(tr.querySelector('.qty').value)||0;
+        if (!medicine_id || qty<=0) continue;
+        const payload = {
+          medicine_id, qty,
+          batch: tr.querySelector('.batch').value,
+          reason: tr.querySelector('.reason').value,
+          return_type: t,
+          patient_id: t==='patient' ? patient_id : null,
+          supplier: t==='supplier' ? supplier : null
+        };
+        const j = await (await fetch('/api/returns', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})).json();
+        if (!j.success) { anyFailed = true; alert('Row failed: ' + j.message); }
+        else savedCount++;
       }
-      const j = await (await fetch('/api/returns', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})).json();
-      if (j.success) { alert(j.message); loadHistory(); init(); }  // reload meds to see new stock
-      else alert(j.message);
+      if (savedCount) alert(`${savedCount} return(s) saved.`);
+      // Refresh medicines list for stock display
+      meds = (await (await fetch('/api/medicines')).json()).data || [];
+      document.getElementById('rowsBody').innerHTML = ''; addRow();
+      loadHistory();
     }
     async function loadHistory() {
       const j = await (await fetch('/api/returns')).json();

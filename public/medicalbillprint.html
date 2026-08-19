@@ -11,14 +11,14 @@
     body { background:#f3f4f6; font-family:'Helvetica Neue',Arial,sans-serif; }
     .sheet {
       background:#fff; color:#000;
-      width: 148mm;                 /* A5 portrait = half A4 */
-      min-height: 210mm;
+      width: 210mm;                 /* A4 portrait full size */
+      min-height: 297mm;
       margin: 20px auto;
-      padding: 8mm 10mm;
+      padding: 14mm 16mm;
       box-shadow:0 4px 16px rgba(0,0,0,0.08);
-      font-size: 11px;
+      font-size: 12px;
     }
-    .h-title { text-align:center; font-size:20px; font-weight:800; letter-spacing:0.6px; }
+    .h-title { text-align:center; font-size:24px; font-weight:800; letter-spacing:0.6px; }
     .h-sub   { text-align:center; font-size:10px; margin-top:3px; color:#333; line-height:1.3; }
     .h-phone { text-align:center; font-size:10px; color:#333; }
     .h-gst   { text-align:center; font-size:10px; color:#333; margin-top:2px; }
@@ -53,7 +53,7 @@
     .notes { margin-top:8px; font-size:9.5px; color:#555; line-height:1.3; }
 
     @media print {
-      @page { size: A5 portrait; margin: 6mm; }
+      @page { size: A4 portrait; margin: 10mm; }
       body { background:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       .no-print { display:none !important; }
       .sheet { box-shadow:none; margin:0; padding:0; width:auto; min-height:auto; }
@@ -99,7 +99,7 @@
     <div class="totals">
       <table>
         <tr><td class="lbl">Sub Total</td><td class="val" id="subtotal">0.00</td></tr>
-        <tr><td class="lbl">Discount</td><td class="val" id="discount">0.00</td></tr>
+        <tr id="discountRow" style="display:none;"><td class="lbl">Discount</td><td class="val" id="discount">0.00</td></tr>
         <tr id="adjRow" style="display:none;"><td class="lbl">Add / Less</td><td class="val" id="adjustment">0.00</td></tr>
         <tr class="grand"><td class="lbl">Grand Total</td><td class="val" id="grandTotal">0.00</td></tr>
       </table>
@@ -153,7 +153,9 @@
       document.getElementById('town').innerText = b.town || '--';
       document.getElementById('invoiceNo').innerText = b.invoice_no || b.bill_no || '--';
       document.getElementById('subtotal').innerText = Number(b.subtotal || 0).toFixed(2);
-      document.getElementById('discount').innerText = Number(b.discount_amount || 0).toFixed(2);
+      const disc = Number(b.discount_amount || 0);
+      document.getElementById('discount').innerText = disc.toFixed(2);
+      if (disc !== 0) document.getElementById('discountRow').style.display = '';
       const adj = Number(b.adjustment || 0);
       if (adj !== 0) {
         document.getElementById('adjRow').style.display = '';

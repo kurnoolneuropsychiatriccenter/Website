@@ -68,6 +68,21 @@
     </div>
   </div>
 
+  <!-- Bill Details Modal -->
+  <div id="opDetailsModal" class="fixed inset-0 z-50 hidden bg-black bg-opacity-50 items-center justify-center p-4" data-testid="op-details-modal">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b px-5 py-3 bg-blue-900 text-white rounded-t-lg">
+        <h3 class="text-lg font-bold"><i class="fa fa-notes-medical mr-2"></i> OP Bill Details</h3>
+        <button onclick="closeOpModal()" class="text-white text-2xl leading-none hover:text-red-300" data-testid="close-op-modal-btn">&times;</button>
+      </div>
+      <div id="opModalBody" class="p-5 text-sm text-gray-800">Loading...</div>
+      <div class="border-t px-5 py-3 flex justify-end space-x-2">
+        <button onclick="closeOpModal()" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded text-sm">Close</button>
+        <a id="opModalPrintLink" href="#" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm" data-testid="modal-print-op-btn"><i class="fa fa-print mr-1"></i> Print</a>
+      </div>
+    </div>
+  </div>
+
   <script>
     async function loadOpHistory() {
       const today = document.getElementById('todayFilter').checked;
@@ -91,7 +106,7 @@
           json.data.forEach(o => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-              <td class="p-3 font-semibold text-blue-600">${o.op_bill_id}</td>
+              <td class="p-3 font-semibold text-blue-600"><a href="#" onclick="showOpDetails(${o.id});return false;" class="hover:underline" data-testid="open-op-details-${o.id}">${o.op_bill_id}</a></td>
               <td class="p-3">${o.op_date}</td>
               <td class="p-3 text-center"><span class="bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-full text-xs">${o.token_number}</span></td>
               <td class="p-3 font-medium">${o.patient_code}</td>
@@ -101,6 +116,7 @@
               <td class="p-3 font-semibold">₹${o.consultation_fee}</td>
               <td class="p-3">${o.payment_mode}</td>
               <td class="p-3 text-center space-x-2">
+                <button onclick="showOpDetails(${o.id})" class="text-gray-600 hover:text-blue-800" title="View Details" data-testid="view-op-${o.id}"><i class="fa fa-eye"></i></button>
                 <a href="opprint.html?id=${o.id}" target="_blank" class="text-blue-600 hover:text-blue-800" title="Print" data-testid="print-op-${o.id}"><i class="fa fa-print"></i></a>
                 <button onclick="deleteOp(${o.id})" class="text-red-600 hover:text-red-800" title="Delete" data-testid="delete-op-${o.id}"><i class="fa fa-trash"></i></button>
               </td>
@@ -129,6 +145,53 @@
         console.error('Error deleting OP', err);
       }
     }
+
+    async function showOpDetails(id) {
+      const modal = document.getElementById('opDetailsModal');
+      const body = document.getElementById('opModalBody');
+      const printLink = document.getElementById('opModalPrintLink');
+      body.innerHTML = '<p class="text-gray-500">Loading...</p>';
+      printLink.href = `opprint.html?id=${id}`;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      try {
+        const r = await fetch(`/api/op/print/${id}`);
+        const j = await r.json();
+        if (!j.success) { body.innerHTML = `<p class="text-red-600">${j.message}</p>`; return; }
+        const d = j.data;
+        body.innerHTML = `
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div><span class="text-gray-500">OP Bill ID:</span> <b>${d.op_bill_id || '-'}</b></div>
+            <div><span class="text-gray-500">Date:</span> ${d.op_date || '-'}</div>
+            <div><span class="text-gray-500">Token No:</span> <b class="text-blue-700">${d.token_number || '-'}</b></div>
+            <div><span class="text-gray-500">Invoice No:</span> ${d.invoice_no || '-'}</div>
+            <div><span class="text-gray-500">Patient Code:</span> <b>${d.patient_code || '-'}</b></div>
+            <div><span class="text-gray-500">Patient Name:</span> ${d.patient_name || '-'}</div>
+            <div><span class="text-gray-500">Age / Gender:</span> ${d.age || '-'} / ${d.gender || '-'}</div>
+            <div><span class="text-gray-500">Mobile:</span> ${d.mobile || '-'}</div>
+            <div><span class="text-gray-500">Address:</span> ${d.address || '-'}</div>
+            <div><span class="text-gray-500">Doctor:</span> ${d.doctor_name || '-'}</div>
+            <div><span class="text-gray-500">Referred By:</span> ${d.referred_by || '-'}</div>
+            <div><span class="text-gray-500">Payment Mode:</span> ${d.payment_mode || '-'}</div>
+            <div><span class="text-gray-500">Consultation Fee:</span> <b class="text-green-700">₹${Number(d.consultation_fee || 0).toFixed(2)}</b></div>
+          </div>
+          <div class="border-t pt-3 mt-3 flex justify-between items-center bg-gray-50 px-3 py-2 rounded">
+            <span class="font-bold">Grand Total:</span>
+            <span class="font-bold text-lg text-blue-700">₹${Number(d.consultation_fee || 0).toFixed(2)}</span>
+          </div>
+        `;
+      } catch (e) {
+        body.innerHTML = `<p class="text-red-600">Error loading details: ${e.message}</p>`;
+      }
+    }
+    function closeOpModal() {
+      const m = document.getElementById('opDetailsModal');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    }
+    document.getElementById('opDetailsModal').addEventListener('click', (e) => {
+      if (e.target.id === 'opDetailsModal') closeOpModal();
+    });
 
     document.getElementById('fromDate').value = new Date().toISOString().split('T')[0];
     document.getElementById('toDate').value = new Date().toISOString().split('T')[0];

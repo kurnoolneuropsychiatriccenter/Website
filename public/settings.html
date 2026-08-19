@@ -23,32 +23,50 @@
 
   <div class="container mx-auto px-4 py-6 max-w-3xl space-y-6">
 
-    <!-- Clinic GST -->
+    <!-- Clinic Info -->
     <div class="bg-white rounded-lg shadow p-6">
-      <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2"><i class="fa fa-receipt mr-2 text-blue-600"></i> Clinic / Pharmacy GST Number</h2>
-      <p class="text-sm text-gray-600 mb-3">This GST number will be printed on every Medical Bill. Leave blank if you don't have one yet.</p>
-      <div class="flex gap-2">
-        <input type="text" id="gstNumber" placeholder="e.g. 37ABCDE1234F1Z2"
-               class="flex-1 border rounded px-3 py-2 text-sm focus:outline-blue-500" data-testid="gst-input">
-        <button onclick="saveGst()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="save-gst-btn">
-          <i class="fa fa-save mr-1"></i> Save
-        </button>
-      </div>
-      <p id="gstMsg" class="text-xs mt-2"></p>
+      <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2"><i class="fa fa-receipt mr-2 text-blue-600"></i> Clinic / Pharmacy GST</h2>
+      <p class="text-sm text-gray-700">GST No printed on Medical Bill: <span class="font-mono font-bold">37IMFPS7901M1Z9</span></p>
+      <p class="text-xs text-gray-500 mt-1">Locked to the clinic's registered GST number. To change it, please contact your developer.</p>
     </div>
 
     <!-- Recovery + Backup -->
     <div class="bg-yellow-50 rounded-lg shadow p-6 border-l-4 border-yellow-500">
-      <h2 class="text-lg font-bold text-gray-800 mb-3"><i class="fa fa-shield-halved mr-2 text-yellow-700"></i> Password Recovery &amp; Data Backup</h2>
-      <p class="text-sm text-gray-700 mb-3">
-        <b>Recovery Code:</b> <span id="recoveryCode" class="font-mono text-lg font-bold bg-yellow-100 border border-yellow-300 rounded px-2 py-0.5" data-testid="recovery-code">--------</span>
-        <button onclick="regenRecovery()" class="ml-2 text-xs text-blue-600 hover:underline" data-testid="regen-recovery-btn">Regenerate</button>
-      </p>
-      <p class="text-xs text-gray-600 mb-4">Write this code on paper and keep it safe. If you forget your login password, click "Forgot Password" on the login screen and enter this code to reveal your password.</p>
+      <h2 class="text-lg font-bold text-gray-800 mb-3"><i class="fa fa-shield-halved mr-2 text-yellow-700"></i> Password Recovery &amp; Data Backup — <span class="text-sm font-normal">what these are</span></h2>
 
-      <p class="text-sm text-gray-700 mb-2"><b>Full Data Backup:</b></p>
-      <a href="/api/backup/download" class="inline-block bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="backup-btn"><i class="fa fa-download mr-1"></i> Download clinic.db (Full Backup)</a>
-      <p class="text-xs text-gray-600 mt-2">This single file contains ALL your data (patients, bills, medicines, purchases, expenses, staff, everything). Copy it to a pen drive or cloud folder every evening. To move to a new PC, install the software fresh and replace <code>clinic.db</code> with your backup.</p>
+      <div class="mb-4">
+        <p class="text-sm text-gray-700 mb-1"><b>1) Recovery Code</b></p>
+        <p class="text-xs text-gray-600 mb-2">This is a small 8-letter code just for YOU. If you ever forget your login password, click <b>Forgot Password</b> on the login screen and type this code — it will show your password. Please write it in a diary.</p>
+        <p>
+          <span id="recoveryCode" class="font-mono text-lg font-bold bg-yellow-100 border border-yellow-300 rounded px-2 py-0.5" data-testid="recovery-code">--------</span>
+          <button onclick="regenRecovery()" class="ml-2 text-xs text-blue-600 hover:underline" data-testid="regen-recovery-btn">Get New Code</button>
+        </p>
+      </div>
+
+      <div class="mb-4">
+        <p class="text-sm text-gray-700 mb-1"><b>2) Your Recovery Email</b></p>
+        <p class="text-xs text-gray-600 mb-2">If your Recovery Code stops working, the developer will reset your password and send the new one to this email.</p>
+        <div class="flex gap-2">
+          <input type="email" id="recEmail" class="flex-1 border rounded px-3 py-2 text-sm" data-testid="rec-email-input">
+          <button onclick="saveEmails()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="save-email-btn"><i class="fa fa-save mr-1"></i> Save</button>
+        </div>
+      </div>
+
+      <div>
+        <p class="text-sm text-gray-700 mb-1"><b>3) Daily Data Backup</b></p>
+        <p class="text-xs text-gray-600 mb-2">Everything you enter — patients, bills, medicines, purchases, expenses, staff — is saved in <b>ONE file</b> called <code>clinic.db</code>. Click below to download that one file to your computer. Copy it to a pen drive every evening. If your computer breaks, put that same file back into the software folder and everything comes back.</p>
+        <a href="/api/backup/download" class="inline-block bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="backup-btn"><i class="fa fa-download mr-1"></i> Download Backup File</a>
+      </div>
+    </div>
+
+    <!-- Danger zone -->
+    <div class="bg-red-50 rounded-lg shadow p-6 border-l-4 border-red-500">
+      <h2 class="text-lg font-bold text-gray-800 mb-3"><i class="fa fa-triangle-exclamation mr-2 text-red-600"></i> Danger Zone</h2>
+      <p class="text-xs text-gray-600 mb-3">These actions cannot be undone. Take a backup first.</p>
+      <div class="flex flex-wrap gap-3">
+        <button onclick="clearDemo()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="clear-demo-btn"><i class="fa fa-broom mr-1"></i> Clear Demo Patients / Doctors / Medicines</button>
+        <button onclick="resetAll()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="reset-all-btn"><i class="fa fa-trash mr-1"></i> Erase ALL Data (Start Fresh)</button>
+      </div>
     </div>
 
     <!-- Change Login Password -->
@@ -102,9 +120,27 @@
       const r = await fetch('/api/settings');
       const j = await r.json();
       if (j.success) {
-        document.getElementById('gstNumber').value = j.data.gst_number || '';
         document.getElementById('recoveryCode').textContent = j.data.recovery_code || '(not set)';
+        document.getElementById('recEmail').value = j.data.recovery_email || '';
       }
+    }
+    async function saveEmails() {
+      const recovery_email = document.getElementById('recEmail').value.trim();
+      const j = await (await fetch('/api/settings', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ recovery_email }) })).json();
+      alert(j.success ? 'Saved.' : (j.message || 'Failed'));
+    }
+    async function clearDemo() {
+      if (!confirm('Remove the two sample doctors, two sample patients and two sample medicines that came with the software?')) return;
+      const j = await (await fetch('/api/dev/clear-demo-data', { method: 'POST' })).json();
+      alert(j.message || (j.success ? 'Done' : 'Failed'));
+    }
+    async function resetAll() {
+      if (!confirm('This will DELETE ALL patients, bills, medicines, purchases, expenses, staff and returns. Only your passwords and settings stay. Have you taken a backup?')) return;
+      if (!confirm('Really erase EVERYTHING? Type OK on the next prompt.')) return;
+      const check = prompt('Type ERASE in capitals to confirm:');
+      if (check !== 'ERASE') return;
+      const j = await (await fetch('/api/dev/reset-all-data', { method: 'POST' })).json();
+      alert(j.message || 'Done');
     }
     async function regenRecovery() {
       if (!confirm('Generate a NEW recovery code? Your old code will stop working.')) return;
@@ -112,14 +148,7 @@
       if (j.success) { document.getElementById('recoveryCode').textContent = j.data.recovery_code; alert('New Recovery Code: ' + j.data.recovery_code + '\nWrite it down.'); }
       else alert(j.message);
     }
-    async function saveGst() {
-      const gst_number = document.getElementById('gstNumber').value.trim();
-      const r = await fetch('/api/settings', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ gst_number }) });
-      const j = await r.json();
-      const el = document.getElementById('gstMsg');
-      el.textContent = j.success ? 'Saved.' : (j.message || 'Failed');
-      el.className = 'text-xs mt-2 ' + (j.success ? 'text-green-600' : 'text-red-600');
-    }
+    async function saveGst() { /* GST is now fixed clinic-wide; kept as no-op for compatibility */ }
     async function changePassword(e, type) {
       e.preventDefault();
       const current_password = document.getElementById(type + 'Current').value;

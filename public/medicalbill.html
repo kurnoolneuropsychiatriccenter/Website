@@ -80,12 +80,16 @@
         <div class="mt-6 border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
           <div class="space-y-3">
             <div>
-              <label class="block text-sm font-medium mb-1">Discount</label>
+              <label class="block text-sm font-medium mb-2">Discount</label>
+              <div class="flex items-center gap-3 mb-2 text-sm">
+                <label><input type="radio" name="discMode" value="percent" checked onchange="setDiscMode('percent')" data-testid="disc-mode-percent"> Discount by %</label>
+                <label><input type="radio" name="discMode" value="amount" onchange="setDiscMode('amount')" data-testid="disc-mode-amount"> Discount by ₹</label>
+              </div>
               <div class="flex items-center gap-2">
-                <input type="number" id="discountPercent" min="0" max="100" value="0" step="0.5" class="w-24 border px-3 py-2 rounded text-sm" oninput="onDiscPct()" data-testid="discount-percent-input">
-                <span class="text-sm">%</span><span class="text-xs text-gray-500">OR</span>
-                <input type="number" id="discountAmount" min="0" value="0" step="0.01" class="w-28 border px-3 py-2 rounded text-sm" oninput="onDiscAmt()" data-testid="discount-amount-input">
-                <span class="text-sm">₹</span>
+                <input type="number" id="discountPercent" min="0" max="100" value="0" step="0.5" class="w-32 border px-3 py-2 rounded text-sm" oninput="calcAll()" data-testid="discount-percent-input">
+                <span class="text-sm">%</span>
+                <input type="number" id="discountAmount" min="0" value="0" step="0.01" class="w-32 border px-3 py-2 rounded text-sm hidden" oninput="calcAll()" data-testid="discount-amount-input">
+                <span id="rupSign" class="text-sm hidden">₹</span>
               </div>
             </div>
             <div>
@@ -201,6 +205,15 @@
         const taxPct = parseFloat(document.getElementById('taxPercent').value)||0;
         tr.querySelector('.tax-display').innerText = (qty*mrp*taxPct/100).toFixed(2);
       });
+    }
+    function setDiscMode(m) {
+      discMode = m;
+      const pct = document.getElementById('discountPercent');
+      const amt = document.getElementById('discountAmount');
+      const rup = document.getElementById('rupSign');
+      if (m === 'percent') { pct.classList.remove('hidden'); amt.classList.add('hidden'); rup.classList.add('hidden'); amt.value = 0; }
+      else { pct.classList.add('hidden'); amt.classList.remove('hidden'); rup.classList.remove('hidden'); pct.value = 0; }
+      calcAll();
     }
     function onDiscPct() { discMode = 'percent'; calcAll(); }
     function onDiscAmt() { discMode = 'amount'; calcAll(); }

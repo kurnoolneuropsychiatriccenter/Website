@@ -12,10 +12,12 @@
     .bill-sheet {
       background: #ffffff;
       color: #000000;
-      max-width: 960px;
-      margin: 24px auto;
-      padding: 28px 32px 32px;
+      width: 210mm;
+      min-height: 297mm;
+      margin: 20px auto;
+      padding: 14mm 16mm;
       box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      font-family: 'Helvetica Neue', Arial, sans-serif;
     }
     .header-title {
       text-align: center;
@@ -43,9 +45,10 @@
     .footer-note { margin-top: 28px; font-size: 12px; color: #333; }
 
     @media print {
+      @page { size: A4 portrait; margin: 10mm; }
       body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .no-print { display: none !important; }
-      .bill-sheet { box-shadow: none; margin: 0; padding: 12mm 14mm; max-width: 100%; }
+      .bill-sheet { box-shadow: none; margin: 0; padding: 0; width: auto; min-height: auto; }
     }
   </style>
 </head>
@@ -69,12 +72,21 @@
       </div>
 
       <div>
+        <div class="lbl">Patient Code :</div>
+        <div class="val" id="patientCode">--</div>
+      </div>
+      <div>
         <div class="lbl">Age :</div>
         <div class="val" id="age">--</div>
       </div>
+
       <div>
         <div class="lbl">Phone :</div>
         <div class="val" id="phone">--</div>
+      </div>
+      <div>
+        <div class="lbl">Token :</div>
+        <div class="val" id="token">--</div>
       </div>
 
       <div>
@@ -143,6 +155,8 @@
         const o = json.data;
         const name = o.patient_name_snapshot || o.patient_name || '--';
         document.getElementById('patientName').innerText = name;
+        document.getElementById('patientCode').innerText = o.patient_code || '--';
+        document.getElementById('token').innerText = o.token_number || '--';
         document.getElementById('opDate').innerText = fmtDate(o.op_date);
         document.getElementById('age').innerText = (o.patient_age_snapshot != null ? o.patient_age_snapshot : (o.age != null ? o.age : '--'));
         document.getElementById('phone').innerText = o.patient_phone_snapshot || o.mobile || '--';

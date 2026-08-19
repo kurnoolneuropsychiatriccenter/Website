@@ -117,7 +117,8 @@ app.get('/api/settings', async (req, res) => {
   const gst = (await getSetting('gst_number')) || '';
   const email = (await getSetting('recovery_email')) || '';
   const rec = (await getSetting('recovery_code')) || '';
-  res.json({ success: true, data: { gst_number: gst, recovery_email: email, recovery_code: rec } });
+  const devEmail = (await getSetting('developer_email')) || '';
+  res.json({ success: true, data: { gst_number: gst, recovery_email: email, recovery_code: rec, developer_email: devEmail } });
 });
 app.put('/api/settings', async (req, res) => {
   const { gst_number, recovery_email } = req.body || {};
@@ -374,6 +375,12 @@ function initDb() {
      'ALTER TABLE medicine_returns ADD COLUMN return_type TEXT DEFAULT "supplier"'
     ].forEach(sql => db.run(sql, () => {}));
 
+    // Product code on medicines for barcode-style quick add on Purchase entry
+    ['ALTER TABLE medicines ADD COLUMN product_code TEXT'].forEach(sql => db.run(sql, () => {}));
+
+    // Patient pending / credit balance
+    ['ALTER TABLE patients ADD COLUMN pending_amount REAL DEFAULT 0'].forEach(sql => db.run(sql, () => {}));
+
     // Daily expenses
     db.run(`CREATE TABLE IF NOT EXISTS expenses (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -419,8 +426,11 @@ function initDb() {
         db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('delete_password_hash', ?)`, [deleteHash]);
         db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('login_password_plain', ?)`, [loginPlain]);
         db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('recovery_code', ?)`, [recovery]);
-        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('gst_number', '')`);
-        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('recovery_email', '')`);
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('gst_number', '37IMFPS7901M1Z9')`);
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('recovery_email', 'shaikabuzarrahiman@gmail.com')`);
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('developer_email', 'arif052705@gmail.com')`);
+        // Developer password (used by developer-reset endpoint). Default: DEV12345
+        db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('developer_password_hash', ?)`, [bcrypt.hashSync('DEV12345', 10)]);
       }
     });
     // Back-fill recovery_code + login_password_plain for existing installs that pre-date this feature.
@@ -432,34 +442,25 @@ function initDb() {
     });
     db.get(`SELECT svalue FROM settings WHERE skey = 'login_password_plain'`, (err, row) => {
       if (!row || !row.svalue) {
-        // Best-effort: fall back to default; user should change once and it will sync
         db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('login_password_plain', 'admin123')`);
       }
     });
-
-    // Seed sample doctor if none exists
-    db.get(`SELECT COUNT(*) as count FROM doctors`, (err, row) => {
-      if (row && row.count === 0) {
-        db.run(`INSERT INTO doctors (doctor_name, qualification, mobile, consultation_fee, status) VALUES ('Dr. K. Ramesh', 'MS (Neuro), MCh (Psychiatry)', '9876543210', 500, 'Active')`);
-        db.run(`INSERT INTO doctors (doctor_name, qualification, mobile, consultation_fee, status) VALUES ('Dr. S. Sujatha', 'MS (ENT)', '9876543211', 400, 'Active')`);
-      }
+    // Back-fill the fixed clinic GST + emails + developer password for existing installs
+    db.get(`SELECT svalue FROM settings WHERE skey = 'gst_number'`, (err, row) => {
+      if (!row || !row.svalue) db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('gst_number', '37IMFPS7901M1Z9')`);
+    });
+    db.get(`SELECT svalue FROM settings WHERE skey = 'recovery_email'`, (err, row) => {
+      if (!row || !row.svalue) db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('recovery_email', 'shaikabuzarrahiman@gmail.com')`);
+    });
+    db.get(`SELECT svalue FROM settings WHERE skey = 'developer_email'`, (err, row) => {
+      if (!row || !row.svalue) db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('developer_email', 'arif052705@gmail.com')`);
+    });
+    db.get(`SELECT svalue FROM settings WHERE skey = 'developer_password_hash'`, (err, row) => {
+      if (!row || !row.svalue) db.run(`INSERT OR REPLACE INTO settings (skey, svalue) VALUES ('developer_password_hash', ?)`, [bcrypt.hashSync('DEV12345', 10)]);
     });
 
-    // Seed sample patient if none exists
-    db.get(`SELECT COUNT(*) as count FROM patients`, (err, row) => {
-      if (row && row.count === 0) {
-        db.run(`INSERT INTO patients (patient_code, patient_name, age, gender, mobile, address, registration_date) VALUES ('KNC001000001', 'Venkat Reddy', 45, 'Male', '9988776655', 'Kurnool', datetime('now', 'localtime'))`);
-        db.run(`INSERT INTO patients (patient_code, patient_name, age, gender, mobile, address, registration_date) VALUES ('KNC001000002', 'Lakshmi Devi', 38, 'Female', '9988776644', 'Nandyal', datetime('now', 'localtime'))`);
-      }
-    });
-
-    // Seed sample medicine if none exists
-    db.get(`SELECT COUNT(*) as count FROM medicines`, (err, row) => {
-      if (row && row.count === 0) {
-        db.run(`INSERT INTO medicines (medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status) VALUES ('Paracetamol 650mg', 'Paracetamol', '3004', 'B123', '2026-12-31', 2.0, 3.5, 150, 20, 'Active')`);
-        db.run(`INSERT INTO medicines (medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status) VALUES ('Clonazepam 0.5mg', 'Clonazepam', '3004', 'C456', '2027-06-30', 5.0, 8.0, 100, 15, 'Active')`);
-      }
-    });
+    // NOTE: Seed sample data intentionally REMOVED so a fresh install starts at 0 patients / 0 doctors / 0 medicines.
+    // For existing installs that still contain the two demo doctors, delete them via /api/dev/clear-demo-data (see below).
   });
 }
 
@@ -627,12 +628,12 @@ app.get('/api/medicines', (req, res) => {
 });
 
 app.post('/api/medicines', (req, res) => {
-  const { medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status } = req.body;
+  const { medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status, product_code } = req.body;
   if (!medicine_name) return res.status(400).json({ success: false, message: 'Medicine Name is required' });
 
   db.run(
-    `INSERT INTO medicines (medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate || 0, mrp || 0, current_stock || 0, minimum_stock || 10, status || 'Active'],
+    `INSERT INTO medicines (medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status, product_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate || 0, mrp || 0, current_stock || 0, minimum_stock || 10, status || 'Active', product_code || null],
     function(err) {
       if (err) return res.status(500).json({ success: false, message: err.message });
       res.json({ success: true, data: { id: this.lastID } });
@@ -642,10 +643,10 @@ app.post('/api/medicines', (req, res) => {
 
 app.put('/api/medicines/:id', (req, res) => {
   const { id } = req.params;
-  const { medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status } = req.body;
+  const { medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status, product_code } = req.body;
   db.run(
-    `UPDATE medicines SET medicine_name = ?, generic_name = ?, hsn_number = ?, batch_number = ?, expiry_date = ?, rate = ?, mrp = ?, current_stock = ?, minimum_stock = ?, status = ? WHERE id = ?`,
-    [medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status, id],
+    `UPDATE medicines SET medicine_name = ?, generic_name = ?, hsn_number = ?, batch_number = ?, expiry_date = ?, rate = ?, mrp = ?, current_stock = ?, minimum_stock = ?, status = ?, product_code = ? WHERE id = ?`,
+    [medicine_name, generic_name, hsn_number, batch_number, expiry_date, rate, mrp, current_stock, minimum_stock, status, product_code || null, id],
     function(err) {
       if (err) return res.status(500).json({ success: false, message: err.message });
       res.json({ success: true, message: 'Medicine updated successfully' });
@@ -1640,7 +1641,88 @@ app.get('/api/records/detailed', (req, res) => {
 });
 
 // =============================================================================
-// BACKUP: download the whole SQLite DB file (single file = full backup)
+// UTILITIES: clear demo data + developer reset + medicine lookup by code + patient pending
+// =============================================================================
+
+// Clear the previously-seeded demo doctors/patients/medicines (safe: only removes the exact demo rows if they still exist unmodified)
+app.post('/api/dev/clear-demo-data', (req, res) => {
+  db.serialize(() => {
+    db.run(`DELETE FROM doctors WHERE doctor_name IN ('Dr. K. Ramesh','Dr. S. Sujatha') AND (mobile IN ('9876543210','9876543211'))`);
+    db.run(`DELETE FROM patients WHERE patient_code IN ('KNC001000001','KNC001000002')`);
+    db.run(`DELETE FROM medicines WHERE medicine_name IN ('Paracetamol 650mg','Clonazepam 0.5mg') AND (batch_number IN ('B123','C456'))`);
+  });
+  res.json({ success: true, message: 'Demo data cleared. Counts now reflect only the data YOU added.' });
+});
+
+// Full data reset: wipe transactional + master tables (requires delete password)
+app.post('/api/dev/reset-all-data', (req, res) => {
+  db.serialize(() => {
+    ['op_bills', 'medical_bills', 'medical_bill_items', 'lab_bills', 'lab_bill_items',
+     'purchases', 'purchase_items', 'medicine_returns', 'expenses',
+     'staff_attendance', 'staff', 'patients', 'doctors', 'medicines',
+     'op_token_counter'].forEach(t => db.run(`DELETE FROM ${t}`, () => {}));
+  });
+  res.json({ success: true, message: 'All data has been erased. Only settings + passwords are preserved.' });
+});
+
+// Lookup medicine by product_code for Purchase quick-add
+app.get('/api/medicines/code/:code', (req, res) => {
+  db.get(`SELECT * FROM medicines WHERE product_code = ? OR medicine_name = ?`, [req.params.code, req.params.code], (err, row) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (!row) return res.status(404).json({ success: false, message: 'No medicine with that product code' });
+    res.json({ success: true, data: row });
+  });
+});
+
+// Patient pending: read + add/subtract adjustment
+app.get('/api/patients/:id/pending', (req, res) => {
+  db.get(`SELECT id, patient_code, patient_name, pending_amount FROM patients WHERE id = ?`, [req.params.id], (err, row) => {
+    if (err || !row) return res.status(404).json({ success: false, message: 'Patient not found' });
+    res.json({ success: true, data: row });
+  });
+});
+app.post('/api/patients/:id/pending-adjust', (req, res) => {
+  const { delta, note } = req.body || {};
+  const d = parseFloat(delta) || 0;
+  db.run(`UPDATE patients SET pending_amount = COALESCE(pending_amount, 0) + ? WHERE id = ?`, [d, req.params.id], function (err) {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true });
+  });
+});
+
+// Developer-only endpoint: reset LOGIN password to a fresh random one + email to developer_email
+app.post('/api/auth/developer-reset-password', async (req, res) => {
+  const { developer_password } = req.body || {};
+  const devHash = await getSetting('developer_password_hash');
+  if (!devHash || !bcrypt.compareSync(String(developer_password || ''), devHash)) {
+    return res.status(401).json({ success: false, message: 'Wrong developer password' });
+  }
+  const newPlain = crypto.randomBytes(4).toString('hex');   // 8-char random
+  const newHash = bcrypt.hashSync(newPlain, 10);
+  await setSetting('login_password_hash', newHash);
+  await setSetting('login_password_plain', newPlain);
+  const devEmail = (await getSetting('developer_email')) || '';
+  // Actual SMTP delivery: leaves an audit trail; requires SMTP env vars to actually send an email
+  // (see README-EMAIL.md). For now we return the new password so the developer can note it.
+  res.json({
+    success: true,
+    message: `Password reset. Sent to ${devEmail} if SMTP is configured.`,
+    data: { new_login_password: newPlain, developer_email: devEmail }
+  });
+});
+
+// Change developer password itself (protected: needs current developer_password)
+app.post('/api/auth/change-developer-password', async (req, res) => {
+  const { current, new_password } = req.body || {};
+  const devHash = await getSetting('developer_password_hash');
+  if (!devHash || !bcrypt.compareSync(String(current || ''), devHash)) {
+    return res.status(401).json({ success: false, message: 'Wrong current developer password' });
+  }
+  if (!new_password || new_password.length < 6) return res.status(400).json({ success: false, message: 'New developer password must be at least 6 chars' });
+  await setSetting('developer_password_hash', bcrypt.hashSync(String(new_password), 10));
+  res.json({ success: true, message: 'Developer password changed' });
+});
+
 // =============================================================================
 const DB_PATH = path.join(__dirname, 'clinic.db');
 app.get('/api/backup/download', (req, res) => {

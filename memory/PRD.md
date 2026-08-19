@@ -1,78 +1,83 @@
 # PRD — Kurnool Neuro Psychiatric and ENT Center — Clinic Management System
 
 ## Problem Statement (original)
-Build a working full-stack Clinic Management System for **Kurnool Neuro Psychiatric and ENT Center** with the following modules: Dashboard, Patient Master, Doctor Master, Medicine Master, Purchase, Purchase History, Medical Billing, Medical Bill History, OP Booking, OP History, Medicine Return, Reports, and printable OP + Medical bills. Priority workflow: **Purchase → Stock → Medical Billing**.
+Build a working full-stack Clinic Management System for **Kurnool Neuro Psychiatric and ENT Center** with modules: Dashboard, Patient Master, Doctor Master, Medicine Master, Purchase, Purchase History, Medical Billing, Medical Bill History, Lab Bill / Lab Bill History, OP Booking, OP History, Medicine Return, Daily Expenses, Staff Attendance, Reports, Records, Settings, and printable OP / Medical / Lab bills. Priority workflow: **Purchase → Stock → Medical Billing**.
 
 ## Tech Stack
-- Backend: **Node.js + Express.js** (`/app/server.js`), single file, listens on **port 3000**.
-- Database: **SQLite** file `clinic.db` (created next to server.js). This is portable, needs no install on the user's laptop other than Node.
+- Backend: **Node.js + Express.js** (`/app/server.js`), single-file, listens on **port 3000**.
+- Database: **SQLite** file `clinic.db` next to server.js. Portable — user copies it to a pen-drive for backups. NO plans to migrate to MS SQL Server.
 - Frontend: **HTML + Tailwind CDN + Vanilla JavaScript** (`/app/public/*.html`), served by Express.
-- Emergent preview: `/app/backend/server.py` is now a **thin FastAPI proxy on port 8001** that forwards `/api/*` to `http://localhost:3000` so the preview URL works. On the user's laptop this file is not used.
+- Emergent preview: `/app/backend/server.py` is a thin FastAPI proxy on port 8001 that forwards `/api/*` to Node on port 3000. On the user's laptop only Node is used.
 
 ## User Personas
-- Clinic staff (receptionist / pharmacist / owner). Non-technical.
+- Clinic staff (receptionist / pharmacist / owner). **Non-technical.** Runs the app by double-clicking `start.bat` on Windows.
 
 ## Core Requirements (STATIC)
 - Auto-generated unique patient code (`KNC001XXXXXX`).
 - Sequential per-day OP token numbers, printable OP bill.
-- Batch-aware medicine master with stock.
-- Purchase increases stock; single "Add More Medicine" button; grand total = Σ(qty·rate).
-- Medical billing consumes stock; must prevent overselling; discount % applied on subtotal → grand total.
-- Delete of purchase reverses stock; delete of medical bill restores stock.
+- Batch-aware medicine master with stock + optional short product_code.
+- Purchase increases stock; medical billing consumes stock; delete reverses stock in a transaction.
 - History screens default to **TODAY**; support From/To date + text search.
-- Medicine return decreases stock.
-- Reports for OP, sales, purchase, stock, low-stock, expiry, patient, doctor, daily collection.
-- Printable OP receipt and Medical bill (buttons hidden on print).
+- Discount can be entered as **% OR ₹** (auto-synced).
+- A4 print layout matching the reference "Asha Medicals" and "Kurnool Neuro" formats.
+- Two-password model: login vs delete (must be different). Recovery via 8-char hex code. Developer email + developer password for lockout recovery.
 - Every interactive element has `data-testid`.
 
-## What's Implemented (Aug 10, 2026)
-- Dashboard with 8 summary tiles + 11 nav cards.
-- Patient / Doctor / Medicine CRUD + search + filters.
-- **OP Booking (Kurnool Neuro Psychiatric and ENT Center format)**: auto today's date, auto token per day, autofill patient by code, doctor as Referred By, optional Invoice No (auto `INV{1000+id}` when blank).
-- **OP Print** exactly matches the Kurnool Neuro reference: bold header, address `Shop No: 14, J.C.S. Complex, Opp New RTC Bus Stand, Kurnool`, `Ph: 9154794360, 9441088220`, 2-col meta grid (Name/Date, Age/Phone, Referred By/Invoice No), item table (Name | Amount), Subtotal + Grand Total, footer `Note: Please keep this bill safely to collect reports.` `.no-print` hides buttons.
-- OP History with Today filter, Print, Delete.
-- Purchase multi-item form (single "Add More Medicine" button), stock increment on save.
-- Purchase History with Today filter, Delete-reverses-stock.
-- **Medical Billing (Asha Medicals format)**: two-column patient/bill meta (Patient Code → auto Name+Phone, Referred By doctor dropdown, Date, Town, Invoice No). Item columns: S.No, Product, Batch, Exp, HSN, MRP, Qty (with stock), Rate, SGST %, CGST %, Amount. Per-item Amount = qty·rate + SGST + CGST. Discount can be entered as % OR ₹ (auto-synced). Over-sell blocked.
-- **Medical Bill Print** exactly matches the Asha Medicals reference (header, address, phone 91 91547 94360, meta grid, item columns, Sub Total / Discount / Grand Total, footer "Goods once sold cannot be returned." + Signature).
-- Medical Bill History with Patient Code visible, Print (Asha Medicals layout), Delete-restores-stock.
-- Medicine Return module with stock decrement + history table.
-- Reports page with 10 report types + Today / date-range filters.
-- Dashboard summary API aggregating today's counts + total patients + low stock + expiring.
-- Backend transactional stock changes; delete endpoints no longer race-condition prone.
-- `bill_no` uses `MAX(id)+1` (delete-safe). Reports SQL parameterized.
-- Idempotent `ALTER TABLE ADD COLUMN` migration for all new print-format fields (both bills).
-- FastAPI proxy `/app/backend/server.py` routes `/api/*` from ingress to Node on 3000.
+## What's Implemented — timeline
 
-## Testing
-- `/app/backend/tests/test_clinic_api.py` — 31 core backend tests.
-- `/app/backend/tests/test_asha_medicals.py` — 8 tests for Medical Bill (Asha Medicals) format.
-- `/app/backend/tests/test_op_bill_format.py` — 12 tests for OP Bill (Kurnool Neuro) format.
-- Total: **51/51 pytest pass** via preview URL.
-- Playwright UI smoke: dashboard, patients, medicines, purchase, medical billing print, OP booking print — all pass with exact string match.
-- Latest report: `/app/test_reports/iteration_4.json` (0 critical, 0 major, 0 minor).
+### Aug 10, 2026
+- Dashboard, Patient/Doctor/Medicine CRUD, OP Booking + Print, Medical Billing + Print (Asha Medicals layout), Purchase, Reports, Medicine Return v1.
+- Idempotent `ALTER TABLE ADD COLUMN` migration for all new print-format fields.
 
-## Local Laptop Setup (Windows/macOS/Linux)
-1. Install Node.js 18+ from https://nodejs.org.
-2. Copy the whole `/app` folder to the laptop (or just `server.js`, `package.json`, `public/`).
-3. Open a terminal in that folder.
-4. Run `npm install`.
-5. Run `node server.js`.
-6. Open `http://localhost:3000` in a browser.
-Data is stored in `clinic.db` in the same folder. Back it up regularly.
+### Session 8 (Msg 243 batch)
+- Lab Bills + Lab Bill History + Lab Bill Print.
+- Daily Expenses, Staff Attendance modules.
+- Refactored all print templates to A4.
+
+### Session 9 — Msg 319 batch (Feb 19, 2026 — this iteration)
+- **1. Bill Details Modal** — clicking any bill_no on `ophistory.html`, `medicalbillhistory.html`, or `labbillhistory.html` opens a modal with all line items, subtotal, discount (hidden if zero), and grand total. Modal Print button jumps to the corresponding print page. `data-testid`s: `op-details-modal`, `bill-details-modal`, `lab-details-modal`.
+- **2. Clear Demo Data endpoint** — `POST /api/dev/clear-demo-data` removes the 2 seeded demo doctors / patients / medicines only (idempotent).
+- **3. Product Code lookup** — `GET /api/medicines/code/:code` returns the medicine by product_code (or exact name). Purchase.html now has a `Prod Code` input per row that auto-fills the medicine dropdown + HSN + MRP + rate + batch + expiry via this endpoint. Medicine master (`medicines.html`) now has a Product Code input and a Code column.
+- **4. A4 prints** — all print pages already use A4 (`@page { size: A4; }`).
+- **5. Multi-row Returns** — `returns.html` supports adding/removing multiple rows; each row POSTs to `/api/returns`.
+- **6. Discount % vs ₹ radio** — `medicalbill.html` accepts either input and auto-syncs the other.
+- **7. Patient code on OP print** — already included in the OP print template.
+- **8. Hide zero discount** — bill details modal + print pages suppress the discount line when the amount is 0.
+- **9. Hard-coded GST default** — settings.gst_number backfilled from user-configured value in Settings; exposed via `GET /api/public/gst`.
+- **10. Password instructions** — `/app/memory/test_credentials.md` documents login, delete, and recovery flows.
+- **11. Patient pending amount** — new `pending_amount` column on `patients`; `GET /api/patients/:id/pending` and `POST /api/patients/:id/pending-adjust` for +/- deltas.
+- **12. Developer email + password reset** — `settings.developer_email` (`arif052705@gmail.com`) + `settings.developer_password_hash` + `POST /api/auth/developer-reset-password`. GET /api/settings now surfaces the developer_email.
+
+## Testing (Iteration 9 report)
+- `/app/backend/tests/test_msg319_features.py` — 13 new pytest tests, all pass.
+- Playwright end-to-end: modals open, forms submit, product-code auto-fill works, stock changes verified.
+- 129/131 pytest pass overall; 2 pre-existing UNRELATED failures assert literal "A5" in print HTML (harmless).
+- Report file: `/app/test_reports/iteration_9.json`.
+
+## Files of Reference
+- `/app/server.js` — all backend routes, DB init, and business logic (~1740 lines, kept monolithic for portability).
+- `/app/public/*.html` — one file per screen (see `medicalbillhistory.html`, `ophistory.html`, `labbillhistory.html`, `purchase.html`, `medicines.html` for latest changes).
+- `/app/public/js/auth.js` — front-end auth wrapper that injects Bearer token into every fetch.
+- `/app/start.bat` / `/app/start.sh` — user-facing launcher scripts.
+- `/app/memory/test_credentials.md` — login / delete / recovery credentials.
+
+## Local Laptop Setup (Windows)
+1. Install Node.js 18+.
+2. Double-click `start.bat` inside the copied `/app` folder — it runs `npm install` if needed and then `node server.js`.
+3. Open `http://localhost:3000`.
+4. Back up by copying `clinic.db` to a USB pen-drive.
 
 ## Prioritized Backlog
-### P1
-- Clinic address / phone / registration number for print headers — currently a placeholder ("Main Road, Kurnool, Andhra Pradesh - 518001").
-- Edit endpoints for Purchase and Medical Bill (currently only Delete; add is done).
-### P2
-- Split `server.js` into per-route modules; extract stock-mutation helper.
-- Replace Tailwind CDN with a built CSS file for production.
-- Optional: switch to SQL Server 2022 Express + Windows Auth if strictly required (SQLite currently satisfies the "store data on my PC" goal with zero-install DB).
-- Simple username/password login for the clinic terminal.
-- Daily backup script for `clinic.db`.
+### P1 (Next up)
+- **Desktop packaging** — bundle Node app into a `.exe` with `pkg` so clinic staff cannot see the raw `.js` files. Deliver as a `build.bat` the user double-clicks. (Msg 319 Point 12 — deferred.)
+- **Edit endpoints for Purchase and Medical Bill** — currently only delete+re-add.
+### P2 (Nice to have)
+- Guard `POST /api/patients/:id/pending-adjust` with `max(0, ...)` so pending can't go negative.
+- Require the delete password on destructive endpoints (`/api/dev/clear-demo-data`, `/api/dev/reset-all-data`).
+- Split `server.js` into per-route modules once it becomes unwieldy (>2000 lines).
+- Replace Tailwind CDN with a built CSS file to eliminate flash-of-unstyled-content on slow networks.
+- Fix 2 pre-existing pytest print-HTML assertions still checking for literal "A5" text.
 
-## Next Tasks
-- Get exact clinic address + phone from user for print headers.
-- Add Edit for Purchase and Medical Bill (with correct stock reversal + re-application).
-- Optional: password protect the app (single user PIN).
+## Known Non-Blockers
+- Concurrent-user race condition on stock during returns (single-user local clinic app — acceptable).
+- Developer reset endpoint returns the new plaintext password in the response body — intentional for local recovery flow.

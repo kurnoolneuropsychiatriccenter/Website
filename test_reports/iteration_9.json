@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 9 — validated Msg 319 batch (12 items). Added /app/backend/tests/test_msg319_features.py (13 pytest tests, all pass) covering clear-demo-data, product_code lookup (success, by-name, 404), patient pending GET+adjust (+/-), returns supplier decrement / patient increment, developer-reset-password 401, settings backfill (developer_email, recovery_email), medicines create+list with product_code. Discovered that /api/settings did NOT expose developer_email despite the backfill inserting it — applied a one-line server.js fix so GET /api/settings now returns developer_email alongside recovery_email + recovery_code. Frontend Playwright verified: /medicalbillhistory.html data-testid=bill-details-modal opens with items table + Sub Total + Discount + Grand Total + Print link to medicalbillprint.html?id=; /ophistory.html data-testid=op-details-modal shows Patient Code, Token No, Referred By, Consultation Fee; /labbillhistory.html data-testid=lab-details-modal shows test items + totals; /purchase.html Prod Code input auto-fills medicine dropdown + HSN + MRP + rate via /api/medicines/code/:code; /medicines.html new data-testid=med-prodcode-input persists product_code and shows in table Code column; /returns.html regression still renders and lists history. Full pytest run: 129 passed, 1 skipped, 2 pre-existing UNRELATED failures in labbillprint/medicalbillprint HTML content tests (they assert on literal 'A5' substring which is no longer in the print HTML — pre-existed before this iteration).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/settings", "issue": "Was not returning developer_email even though the setting is backfilled on boot. FIXED in this iteration (server.js line 116-121)."},
+      {"endpoint": "GET /medicalbillprint.html and /labbillprint.html", "issue": "Two pre-existing pytest checks (test_medical_bill_compact_print.py, test_lab_bill.py::test_labbill_print_html_contents) assert 'A5' substring in the served HTML — no longer present. Unrelated to Msg 319."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ophistory.html op-details-modal", "issue": "Label reads 'Referred By' but the value shown is d.doctor_name (the treating doctor). The user-entered referred_by free-text (op_bills.referred_by column) is never surfaced. If the intent was to show the referred_by note, use d.referred_by instead of d.doctor_name.", "selector": "[data-testid=op-details-modal]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_msg319_features.py",
+    "/app/test_reports/pytest/msg319.xml",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: on the OP details modal in ophistory.html, decide whether the 'Referred By' row should render d.referred_by (user-entered) or d.doctor_name (treating doctor); currently only doctor_name is shown.",
+    "Optional cleanup: two pre-existing print-HTML tests still assert the literal 'A5' substring — either remove the assertion or add a hidden data attribute containing 'A5' in the print CSS."
+  ],
+  "critical_code_review_comments": [
+    "server.js still ~1740 lines; splitting into route modules would help maintainability but is not urgent.",
+    "/api/patients/:id/pending-adjust does not validate delta bounds — negative deltas can drive pending_amount below zero. Consider a max(0, ...) guard.",
+    "/api/dev/clear-demo-data has no auth-specific gate beyond the general Bearer requirement — because seed data was removed already, calling it on a fresh install is idempotent, but consider making destructive endpoints require the delete password (like DELETE).",
+    "/api/auth/developer-reset-password happily returns the new plaintext password in the response body (fine for dev use). Ensure the frontend never surfaces this on shared screens; mask it in logs.",
+    "Returns endpoint /api/returns wraps stock update in a transaction — good — but does not re-fetch stock before decrementing, so under concurrent returns there is a small race window (acceptable for single-user local clinic app)."
+  ],
+  "updated_files": [
+    "/app/server.js (GET /api/settings now includes developer_email)",
+    "/app/backend/tests/test_msg319_features.py (new — 13 tests covering Msg 319 endpoints)"
+  ],
+  "success_rate": {"backend": "100% on Msg 319 tests (13/13); overall 129/131 pass with 2 pre-existing unrelated failures", "frontend": "100% of Msg 319 UI checks (5/5 features verified)"},
+  "test_credentials": "Login: admin123 | Delete: delete123 | Developer: DEV12345 (default; hashed in settings.developer_password_hash)",
+  "seed_data_creation": "Playwright script auto-created UI_Med_*, UI_Pt*, and one Medical/Lab/OP bill each via authenticated fetches (tokens set by /login.html flow). Pytest suite creates+cleans up its own TEST_* medicines and patients.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Msg 319 endpoints and UI modals are wired and tested. Note: /api/medicalbill/save requires patient_id (not patient_name alone), /api/labbill/save takes items with keys {test_name, test_rate} — my first Playwright seed passed 'rate' by mistake and the lab bill saved with 0-rate rows. If you re-seed, use test_rate. Frontend fetch() is wrapped by /js/auth.js which auto-injects Bearer from sessionStorage (login via /login.html). The new backend test file uses the same session-scoped auth conftest as prior iterations.",
+  "rca of the issue": "Only real bug found this iteration: /api/settings response object was missing developer_email even though the backfill (server.js lines 454-455) writes it to the settings table. Cause: the GET /api/settings handler at line 116 only projected gst_number, recovery_email, and recovery_code. Fix: added developer_email to the projected object. Verified with pytest and Playwright."
+}

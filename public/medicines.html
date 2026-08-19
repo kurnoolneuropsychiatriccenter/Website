@@ -46,6 +46,7 @@
         <thead>
           <tr class="bg-blue-50 text-blue-900 border-b text-sm">
             <th class="p-3">ID</th>
+            <th class="p-3">Code</th>
             <th class="p-3">Medicine Name</th>
             <th class="p-3">Generic Name</th>
             <th class="p-3">Batch</th>
@@ -57,7 +58,7 @@
           </tr>
         </thead>
         <tbody id="medicinesTableBody" class="divide-y text-sm">
-          <tr><td colspan="9" class="p-4 text-center text-gray-500">Loading medicines...</td></tr>
+          <tr><td colspan="10" class="p-4 text-center text-gray-500">Loading medicines...</td></tr>
         </tbody>
       </table>
     </div>
@@ -76,6 +77,10 @@
           <div class="col-span-2">
             <label class="block text-sm font-medium mb-1">Medicine Name *</label>
             <input type="text" id="medicineName" required class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="med-name-input">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Product Code <span class="text-gray-400 text-xs">(short code for fast lookup)</span></label>
+            <input type="text" id="productCode" class="w-full border px-3 py-2 rounded text-sm focus:outline-blue-500" data-testid="med-prodcode-input">
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">Generic Name</label>
@@ -139,6 +144,7 @@
             const tr = document.createElement('tr');
             tr.innerHTML = `
               <td class="p-3 font-semibold text-blue-600">${m.id}</td>
+              <td class="p-3 font-mono text-xs">${m.product_code || '-'}</td>
               <td class="p-3 font-medium">${m.medicine_name}</td>
               <td class="p-3 text-gray-600">${m.generic_name || '-'}</td>
               <td class="p-3">${m.batch_number || '-'}</td>
@@ -154,7 +160,7 @@
             tbody.appendChild(tr);
           });
         } else {
-          tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-gray-500">No medicines found.</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-gray-500">No medicines found.</td></tr>`;
         }
       } catch (err) {
         console.error('Error loading medicines', err);
@@ -172,6 +178,7 @@
       document.getElementById('modalTitle').innerText = 'Edit Medicine';
       document.getElementById('medicineId').value = m.id;
       document.getElementById('medicineName').value = m.medicine_name;
+      document.getElementById('productCode').value = m.product_code || '';
       document.getElementById('genericName').value = m.generic_name || '';
       document.getElementById('hsnNumber').value = m.hsn_number || '';
       document.getElementById('batchNumber').value = m.batch_number || '';
@@ -192,6 +199,7 @@
       const id = document.getElementById('medicineId').value;
       const data = {
         medicine_name: document.getElementById('medicineName').value,
+        product_code: document.getElementById('productCode').value,
         generic_name: document.getElementById('genericName').value,
         hsn_number: document.getElementById('hsnNumber').value,
         batch_number: document.getElementById('batchNumber').value,
