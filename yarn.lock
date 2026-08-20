@@ -880,6 +880,11 @@ node-gyp@8.x:
     tar "^6.1.2"
     which "^2.0.2"
 
+nodemailer@^9.0.5:
+  version "9.0.5"
+  resolved "https://registry.npmjs.org/nodemailer/-/nodemailer-9.0.5.tgz"
+  integrity sha512-wvjiKvjczmsN7U/8006JOdXubgBk2XFAbioDMbT+sM7cPs0QrhJTa6KBRX7P5REGGkDcLUz/EarWidb8G8C1jQ==
+
 nopt@^5.0.0:
   version "5.0.0"
   resolved "https://registry.npmjs.org/nopt/-/nopt-5.0.0.tgz"
