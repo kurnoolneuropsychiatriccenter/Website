@@ -382,6 +382,21 @@ function initDb() {
     // Patient pending / credit balance
     ['ALTER TABLE patients ADD COLUMN pending_amount REAL DEFAULT 0'].forEach(sql => db.run(sql, () => {}));
 
+    // Pending medicines: items owed to a patient (out-of-stock at billing time OR walked-out with promise)
+    db.run(`CREATE TABLE IF NOT EXISTS pending_medicines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id INTEGER,
+      patient_name_snapshot TEXT,
+      patient_phone_snapshot TEXT,
+      medicine_name TEXT,
+      qty REAL,
+      notes TEXT,
+      source_bill_id INTEGER,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now', 'localtime')),
+      cleared_at TEXT
+    )`);
+
     // Daily expenses
     db.run(`CREATE TABLE IF NOT EXISTS expenses (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -773,6 +788,50 @@ app.delete('/api/op/:id', (req, res) => {
 // -----------------------------------------------------------------------
 // PURCHASE API & STOCK INCREMENT
 // -----------------------------------------------------------------------
+
+// Suppliers master
+app.get('/api/suppliers', (req, res) => {
+  const q = (req.query.search || '').trim();
+  const like = `%${q}%`;
+  const sql = q
+    ? `SELECT * FROM suppliers WHERE supplier_name LIKE ? OR gst_number LIKE ? ORDER BY supplier_name COLLATE NOCASE`
+    : `SELECT * FROM suppliers ORDER BY supplier_name COLLATE NOCASE`;
+  db.all(sql, q ? [like, like] : [], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+// Upsert a supplier by name (case-insensitive). Called by purchase/save automatically and can be called manually.
+function upsertSupplier(s, cb) {
+  const name = (s.supplier_name || '').trim();
+  if (!name) return cb && cb(null);
+  db.get(`SELECT id FROM suppliers WHERE supplier_name = ? COLLATE NOCASE`, [name], (err, row) => {
+    if (err) return cb && cb(err);
+    if (row) {
+      db.run(`UPDATE suppliers SET gst_number = ?, fssai_number = ?, pan_number = ?, msme_number = ?, phone = ?, address = ? WHERE id = ?`,
+        [s.supplier_gst || '', s.supplier_fssai || '', s.supplier_pan || '', s.supplier_msme || '', s.supplier_phone || '', s.supplier_address || '', row.id],
+        (e2) => cb && cb(e2, row.id));
+    } else {
+      db.run(`INSERT INTO suppliers (supplier_name, gst_number, fssai_number, pan_number, msme_number, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [name, s.supplier_gst || '', s.supplier_fssai || '', s.supplier_pan || '', s.supplier_msme || '', s.supplier_phone || '', s.supplier_address || ''],
+        function(e2) { cb && cb(e2, this && this.lastID); });
+    }
+  });
+}
+app.post('/api/suppliers', (req, res) => {
+  upsertSupplier(req.body || {}, (err, id) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: { id } });
+  });
+});
+app.delete('/api/suppliers/:id', (req, res) => {
+  db.run(`DELETE FROM suppliers WHERE id = ?`, [req.params.id], (err) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true });
+  });
+});
+
 app.post('/api/purchase/save', (req, res) => {
   const { invoice_no, supplier_name, invoice_date, items,
           supplier_gst, supplier_fssai, supplier_pan, supplier_msme, supplier_phone, supplier_address,
@@ -805,6 +864,11 @@ app.post('/api/purchase/save', (req, res) => {
 
   db.serialize(() => {
     db.run(`BEGIN TRANSACTION`);
+
+    // Auto-save/update the supplier in the suppliers master (fire-and-forget)
+    upsertSupplier({
+      supplier_name, supplier_gst, supplier_fssai, supplier_pan, supplier_msme, supplier_phone, supplier_address
+    }, () => {});
 
     db.run(
       `INSERT INTO purchases (invoice_no, supplier_name, invoice_date, grand_total,
@@ -1235,6 +1299,69 @@ app.get('/api/returns', (req, res) => {
   `, [], (err, rows) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     res.json({ success: true, data: rows });
+  });
+});
+
+// -----------------------------------------------------------------------
+// PENDING MEDICINES API (medicines owed to a patient)
+// -----------------------------------------------------------------------
+app.get('/api/pending-medicines', (req, res) => {
+  const status = (req.query.status || 'pending').trim();
+  const params = [];
+  let where = '';
+  if (status === 'all') where = ''; else { where = 'WHERE pm.status = ?'; params.push(status); }
+  db.all(`
+    SELECT pm.*, p.patient_code, p.patient_name AS patient_name_current, p.mobile AS mobile_current
+    FROM pending_medicines pm
+    LEFT JOIN patients p ON pm.patient_id = p.id
+    ${where}
+    ORDER BY pm.id DESC
+  `, params, (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, data: rows });
+  });
+});
+
+app.post('/api/pending-medicines', (req, res) => {
+  const { patient_id, medicine_name, qty, notes, source_bill_id } = req.body || {};
+  if (!medicine_name || !qty) return res.status(400).json({ success: false, message: 'Medicine name and Qty are required' });
+  // Snapshot the patient name/phone so history is stable even if the patient row is later edited
+  const snapshotAndInsert = (name, phone) => {
+    db.run(
+      `INSERT INTO pending_medicines (patient_id, patient_name_snapshot, patient_phone_snapshot, medicine_name, qty, notes, source_bill_id, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [patient_id || null, name || '', phone || '', String(medicine_name).trim(), parseFloat(qty), notes || '', source_bill_id || null],
+      function(err) {
+        if (err) return res.status(500).json({ success: false, message: err.message });
+        res.json({ success: true, data: { id: this.lastID } });
+      }
+    );
+  };
+  if (patient_id) {
+    db.get(`SELECT patient_name, mobile FROM patients WHERE id = ?`, [patient_id], (e, row) => {
+      if (row) snapshotAndInsert(row.patient_name, row.mobile);
+      else snapshotAndInsert('', '');
+    });
+  } else {
+    snapshotAndInsert(req.body.patient_name_snapshot || '', req.body.patient_phone_snapshot || '');
+  }
+});
+
+// Mark a pending item as cleared (delivered / paid). Requires delete password (enforced by global middleware since it's a DELETE).
+app.delete('/api/pending-medicines/:id', (req, res) => {
+  db.run(`UPDATE pending_medicines SET status = 'cleared', cleared_at = datetime('now', 'localtime') WHERE id = ?`, [req.params.id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (this.changes === 0) return res.status(404).json({ success: false, message: 'Not found' });
+    res.json({ success: true, message: 'Pending medicine cleared' });
+  });
+});
+
+// Hard-delete a pending item (e.g. wrong entry) — also needs delete password
+app.delete('/api/pending-medicines/:id/purge', (req, res) => {
+  db.run(`DELETE FROM pending_medicines WHERE id = ?`, [req.params.id], function(err) {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (this.changes === 0) return res.status(404).json({ success: false, message: 'Pending record not found' });
+    res.json({ success: true });
   });
 });
 
@@ -1873,6 +2000,222 @@ const DB_PATH = path.join(__dirname, 'clinic.db');
 app.get('/api/backup/download', (req, res) => {
   const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
   res.download(DB_PATH, `clinic-backup-${stamp}.db`);
+});
+
+// Full data export as a single PDF (all modules, one file). Useful for archiving / sharing.
+app.get('/api/backup/all-pdf', async (req, res) => {
+  const PDFDocument = require('pdfkit');
+  const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="clinic-full-data-${stamp}.pdf"`);
+  const doc = new PDFDocument({ size: 'A4', margin: 32, bufferPages: true });
+  doc.pipe(res);
+
+  const all = (sql) => new Promise((resolve) => db.all(sql, [], (err, rows) => resolve(err ? [] : rows)));
+
+  function h1(title) {
+    doc.addPage();
+    doc.fontSize(18).fillColor('#0f3d8f').text(title, { align: 'left' });
+    doc.moveTo(32, doc.y).lineTo(563, doc.y).strokeColor('#0f3d8f').lineWidth(1.2).stroke();
+    doc.moveDown(0.5);
+    doc.fillColor('#000');
+  }
+  function drawTable(cols, rows) {
+    // cols = [{header, key, w}]
+    doc.fontSize(9);
+    const startX = 32;
+    let x = startX;
+    // header
+    doc.fillColor('#fff').rect(startX, doc.y, cols.reduce((s, c) => s + c.w, 0), 16).fill('#0f3d8f');
+    doc.fillColor('#fff');
+    let yh = doc.y;
+    cols.forEach(c => { doc.text(c.header, x + 3, yh + 3, { width: c.w - 6, ellipsis: true }); x += c.w; });
+    doc.moveDown(1.2);
+    doc.fillColor('#000');
+    // rows
+    rows.forEach((r, i) => {
+      // page break if close to bottom
+      if (doc.y > 780) { doc.addPage(); }
+      x = startX;
+      if (i % 2 === 0) {
+        doc.rect(startX, doc.y - 1, cols.reduce((s, c) => s + c.w, 0), 14).fillOpacity(0.05).fill('#0f3d8f').fillOpacity(1);
+      }
+      const ytop = doc.y;
+      let maxYAfter = ytop;
+      cols.forEach(c => {
+        const val = r[c.key] == null ? '' : String(r[c.key]);
+        doc.fillColor('#000').text(val, x + 3, ytop, { width: c.w - 6, ellipsis: true });
+        maxYAfter = Math.max(maxYAfter, doc.y);
+        x += c.w;
+      });
+      doc.y = ytop + 12;
+    });
+    doc.moveDown(0.8);
+  }
+
+  // Cover page
+  doc.fontSize(24).fillColor('#0f3d8f').text('Kurnool Neuro Psychiatric and ENT Center', { align: 'center' });
+  doc.moveDown(0.3);
+  doc.fontSize(12).fillColor('#333').text('Complete Data Export', { align: 'center' });
+  doc.moveDown(0.3);
+  doc.fontSize(10).fillColor('#666').text(new Date().toLocaleString(), { align: 'center' });
+  doc.moveDown(2);
+  doc.fillColor('#000').fontSize(10).text('This document contains every record stored by the clinic software as of the date/time above. Sections included: Patients, Doctors, Medicines, Purchases, Medical Bills, Lab Bills, OP Bills, Pending Medicines, Medicine Returns, Daily Expenses, Staff, Staff Attendance.');
+
+  // Patients
+  const patients = await all(`SELECT patient_code, patient_name, age, gender, mobile, address, pending_amount FROM patients ORDER BY id`);
+  h1(`Patients (${patients.length})`);
+  drawTable([
+    { header: 'Code', key: 'patient_code', w: 78 },
+    { header: 'Name', key: 'patient_name', w: 130 },
+    { header: 'Age', key: 'age', w: 30 },
+    { header: 'Sex', key: 'gender', w: 30 },
+    { header: 'Mobile', key: 'mobile', w: 80 },
+    { header: 'Address', key: 'address', w: 130 },
+    { header: 'Pending₹', key: 'pending_amount', w: 55 }
+  ], patients);
+
+  // Doctors
+  const doctors = await all(`SELECT doctor_name, qualification, specialization, mobile FROM doctors ORDER BY id`);
+  h1(`Doctors (${doctors.length})`);
+  drawTable([
+    { header: 'Name', key: 'doctor_name', w: 160 },
+    { header: 'Qualification', key: 'qualification', w: 130 },
+    { header: 'Specialization', key: 'specialization', w: 140 },
+    { header: 'Mobile', key: 'mobile', w: 100 }
+  ], doctors);
+
+  // Medicines
+  const meds = await all(`SELECT product_code, medicine_name, generic_name, batch_number, expiry_date, current_stock, rate, mrp FROM medicines ORDER BY medicine_name COLLATE NOCASE`);
+  h1(`Medicines / Stock (${meds.length})`);
+  drawTable([
+    { header: 'Code', key: 'product_code', w: 55 },
+    { header: 'Medicine', key: 'medicine_name', w: 130 },
+    { header: 'Generic', key: 'generic_name', w: 100 },
+    { header: 'Batch', key: 'batch_number', w: 55 },
+    { header: 'Expiry', key: 'expiry_date', w: 60 },
+    { header: 'Stock', key: 'current_stock', w: 40 },
+    { header: 'Rate', key: 'rate', w: 40 },
+    { header: 'MRP', key: 'mrp', w: 50 }
+  ], meds);
+
+  // Purchases
+  const purch = await all(`SELECT p.invoice_no, p.invoice_date, p.supplier_name, p.subtotal, p.sgst_total, p.cgst_total, p.adjustment, p.grand_total FROM purchases p ORDER BY p.id DESC`);
+  h1(`Purchase Invoices (${purch.length})`);
+  drawTable([
+    { header: 'Invoice', key: 'invoice_no', w: 80 },
+    { header: 'Date', key: 'invoice_date', w: 65 },
+    { header: 'Supplier', key: 'supplier_name', w: 150 },
+    { header: 'Subtotal', key: 'subtotal', w: 55 },
+    { header: 'SGST', key: 'sgst_total', w: 45 },
+    { header: 'CGST', key: 'cgst_total', w: 45 },
+    { header: 'Adj', key: 'adjustment', w: 40 },
+    { header: 'Grand', key: 'grand_total', w: 55 }
+  ], purch);
+
+  // Medical bills
+  const mbills = await all(`SELECT bill_no, bill_date, patient_name_snapshot, patient_phone_snapshot, subtotal, discount_percent, discount_amount, adjustment, grand_total FROM medical_bills ORDER BY id DESC`);
+  h1(`Medical Bills (${mbills.length})`);
+  drawTable([
+    { header: 'Bill No', key: 'bill_no', w: 110 },
+    { header: 'Date', key: 'bill_date', w: 60 },
+    { header: 'Patient', key: 'patient_name_snapshot', w: 110 },
+    { header: 'Phone', key: 'patient_phone_snapshot', w: 75 },
+    { header: 'Sub', key: 'subtotal', w: 45 },
+    { header: 'Disc%', key: 'discount_percent', w: 40 },
+    { header: 'Disc₹', key: 'discount_amount', w: 45 },
+    { header: 'Grand', key: 'grand_total', w: 46 }
+  ], mbills);
+
+  // Lab bills
+  const lbills = await all(`SELECT bill_no, bill_date, patient_name_snapshot, patient_phone_snapshot, subtotal, discount_amount, grand_total, notes FROM lab_bills ORDER BY id DESC`);
+  h1(`Lab Bills (${lbills.length})`);
+  drawTable([
+    { header: 'Bill No', key: 'bill_no', w: 110 },
+    { header: 'Date', key: 'bill_date', w: 60 },
+    { header: 'Patient', key: 'patient_name_snapshot', w: 110 },
+    { header: 'Phone', key: 'patient_phone_snapshot', w: 75 },
+    { header: 'Sub', key: 'subtotal', w: 50 },
+    { header: 'Disc', key: 'discount_amount', w: 45 },
+    { header: 'Grand', key: 'grand_total', w: 46 },
+    { header: 'Notes', key: 'notes', w: 35 }
+  ], lbills);
+
+  // OP bills
+  const ops = await all(`SELECT o.op_bill_id, o.op_date, o.token_number, o.consultation_fee, o.payment_mode, p.patient_code, p.patient_name, d.doctor_name FROM op_bills o LEFT JOIN patients p ON o.patient_id = p.id LEFT JOIN doctors d ON o.doctor_id = d.id ORDER BY o.id DESC`);
+  h1(`OP Bills (${ops.length})`);
+  drawTable([
+    { header: 'OP ID', key: 'op_bill_id', w: 85 },
+    { header: 'Date', key: 'op_date', w: 65 },
+    { header: 'Token', key: 'token_number', w: 45 },
+    { header: 'Code', key: 'patient_code', w: 78 },
+    { header: 'Patient', key: 'patient_name', w: 100 },
+    { header: 'Doctor', key: 'doctor_name', w: 90 },
+    { header: 'Fee', key: 'consultation_fee', w: 40 },
+    { header: 'Mode', key: 'payment_mode', w: 40 }
+  ], ops);
+
+  // Pending medicines
+  const pend = await all(`SELECT created_at, patient_name_snapshot, patient_phone_snapshot, medicine_name, qty, notes, status, cleared_at FROM pending_medicines ORDER BY id DESC`);
+  h1(`Pending Medicines (${pend.length})`);
+  drawTable([
+    { header: 'Added On', key: 'created_at', w: 100 },
+    { header: 'Patient', key: 'patient_name_snapshot', w: 110 },
+    { header: 'Phone', key: 'patient_phone_snapshot', w: 75 },
+    { header: 'Medicine', key: 'medicine_name', w: 110 },
+    { header: 'Qty', key: 'qty', w: 35 },
+    { header: 'Status', key: 'status', w: 50 },
+    { header: 'Cleared', key: 'cleared_at', w: 60 }
+  ], pend);
+
+  // Medicine returns
+  const rets = await all(`SELECT r.return_date, r.return_type, r.qty, r.reason, m.medicine_name, p.patient_name FROM medicine_returns r LEFT JOIN medicines m ON r.medicine_id = m.id LEFT JOIN patients p ON r.patient_id = p.id ORDER BY r.id DESC`);
+  h1(`Medicine Returns (${rets.length})`);
+  drawTable([
+    { header: 'Date', key: 'return_date', w: 70 },
+    { header: 'Type', key: 'return_type', w: 55 },
+    { header: 'Medicine', key: 'medicine_name', w: 140 },
+    { header: 'Patient', key: 'patient_name', w: 110 },
+    { header: 'Qty', key: 'qty', w: 40 },
+    { header: 'Reason', key: 'reason', w: 115 }
+  ], rets);
+
+  // Expenses
+  const exps = await all(`SELECT expense_date, description, amount FROM expenses ORDER BY id DESC`);
+  h1(`Daily Expenses (${exps.length})`);
+  drawTable([
+    { header: 'Date', key: 'expense_date', w: 90 },
+    { header: 'Description', key: 'description', w: 330 },
+    { header: 'Amount ₹', key: 'amount', w: 110 }
+  ], exps);
+
+  // Staff + attendance
+  const staff = await all(`SELECT staff_name, role, mobile, status FROM staff ORDER BY id`);
+  h1(`Staff (${staff.length})`);
+  drawTable([
+    { header: 'Name', key: 'staff_name', w: 170 },
+    { header: 'Role', key: 'role', w: 130 },
+    { header: 'Mobile', key: 'mobile', w: 120 },
+    { header: 'Status', key: 'status', w: 110 }
+  ], staff);
+
+  const att = await all(`SELECT a.attendance_date, s.staff_name, a.status, a.notes FROM staff_attendance a LEFT JOIN staff s ON a.staff_id = s.id ORDER BY a.id DESC LIMIT 500`);
+  h1(`Staff Attendance — last 500 rows (${att.length})`);
+  drawTable([
+    { header: 'Date', key: 'attendance_date', w: 80 },
+    { header: 'Staff', key: 'staff_name', w: 170 },
+    { header: 'Status', key: 'status', w: 80 },
+    { header: 'Notes', key: 'notes', w: 200 }
+  ], att);
+
+  // Page numbers
+  const range = doc.bufferedPageRange();
+  for (let i = 0; i < range.count; i++) {
+    doc.switchToPage(range.start + i);
+    doc.fontSize(8).fillColor('#666').text(`Page ${i + 1} of ${range.count}`, 32, 810, { width: 531, align: 'right' });
+  }
+
+  doc.end();
 });
 
 app.listen(PORT, () => {

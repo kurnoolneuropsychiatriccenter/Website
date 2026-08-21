@@ -55,7 +55,11 @@
       <div>
         <p class="text-sm text-gray-700 mb-1"><b>3) Daily Data Backup</b></p>
         <p class="text-xs text-gray-600 mb-2">Everything you enter — patients, bills, medicines, purchases, expenses, staff — is saved in <b>ONE file</b> called <code>clinic.db</code>. Click below to download that one file to your computer. Copy it to a pen drive every evening. If your computer breaks, put that same file back into the software folder and everything comes back.</p>
-        <a href="/api/backup/download" class="inline-block bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="backup-btn"><i class="fa fa-download mr-1"></i> Download Backup File</a>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="downloadBackup()" class="inline-block bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="backup-btn"><i class="fa fa-download mr-1"></i> Download Backup File (.db)</button>
+          <button onclick="downloadFullPdf()" class="inline-block bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded text-sm font-medium" data-testid="full-pdf-btn"><i class="fa fa-file-pdf mr-1"></i> Download ALL Data as PDF</button>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">The PDF contains every record (patients, bills, medicines, staff, pending medicines, everything) in one printable file — useful for archiving or sharing with your accountant.</p>
       </div>
     </div>
 
@@ -290,6 +294,24 @@
       const j = await (await fetch('/api/auth/regenerate-recovery-code', { method: 'POST' })).json();
       if (j.success) { document.getElementById('recoveryCode').textContent = j.data.recovery_code; alert('New Recovery Code: ' + j.data.recovery_code + '\nWrite it down.'); }
       else alert(j.message);
+    }
+    async function _downloadBlob(url, filename) {
+      const r = await fetch(url);
+      if (!r.ok) { alert('Download failed: ' + r.status); return; }
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      const objUrl = URL.createObjectURL(blob);
+      a.href = objUrl; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1500);
+    }
+    function downloadBackup() {
+      const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+      _downloadBlob('/api/backup/download', `clinic-backup-${stamp}.db`);
+    }
+    function downloadFullPdf() {
+      const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+      _downloadBlob('/api/backup/all-pdf', `clinic-full-data-${stamp}.pdf`);
     }
     async function saveGst() { /* GST is now fixed clinic-wide; kept as no-op for compatibility */ }
     async function changePassword(e, type) {

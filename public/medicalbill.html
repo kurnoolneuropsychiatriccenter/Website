@@ -148,7 +148,10 @@
         <td class="p-1"><input type="number" step="0.01" min="0" value="0" class="border px-1 py-1 rounded text-xs w-16 mrp" oninput="calcRow('${rid}')" data-testid="bill-mrp-input"></td>
         <td class="p-1 tax-display text-xs">0.00</td>
         <td class="p-1 amount text-right font-semibold text-xs">0.00</td>
-        <td class="p-1 text-center"><button type="button" onclick="rm('${rid}')" class="text-red-600" data-testid="bill-remove-btn"><i class="fa fa-trash"></i></button></td>`;
+        <td class="p-1 text-center whitespace-nowrap">
+          <button type="button" onclick="saveRowPending('${rid}')" class="text-orange-600 hover:text-orange-800 mr-1" title="Out of stock? Save this medicine as PENDING for this patient" data-testid="bill-pending-btn"><i class="fa fa-hourglass-half"></i></button>
+          <button type="button" onclick="rm('${rid}')" class="text-red-600" data-testid="bill-remove-btn"><i class="fa fa-trash"></i></button>
+        </td>`;
       tbody.appendChild(tr);
       renum();
     }
@@ -220,6 +223,32 @@
     function rm(rid) {
       if (document.querySelectorAll('#rowsBody tr').length <= 1) { alert('At least one row is required.'); return; }
       document.getElementById(rid).remove(); renum(); calcAll();
+    }
+    async function saveRowPending(rid) {
+      const patient_id = document.getElementById('patientId').value;
+      if (!patient_id) { alert('Please load the patient by code first.'); return; }
+      const tr = document.getElementById(rid);
+      const sel = tr.querySelector('.med');
+      const medName = sel.value ? sel.options[sel.selectedIndex].text.replace(/\s*\[Stock:.*$/, '').trim() : '';
+      const typed = prompt(medName ? `Save this medicine as PENDING for the patient?\n\n${medName}\n\nType a note (optional):` : 'Type the medicine name to mark as PENDING:');
+      if (typed === null) return; // cancelled
+      const finalName = medName || typed;
+      if (!finalName) { alert('Please pick a medicine or type its name.'); return; }
+      const qty = parseFloat(tr.querySelector('.qty').value) || 1;
+      const j = await (await fetch('/api/pending-medicines', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ patient_id, medicine_name: finalName, qty, notes: typed || '' })
+      })).json();
+      if (!j.success) { alert('Could not save to pending: ' + (j.message || 'Failed')); return; }
+      // Only remove from the bill AFTER the pending save succeeded, so we never lose data
+      if (document.querySelectorAll('#rowsBody tr').length > 1) {
+        tr.remove();
+      } else {
+        addRow();
+        tr.remove();
+      }
+      renum(); calcAll();
+      alert(`Saved to Pending Medicines for this patient.\nSee the "Pending Medicines" module for the full list.`);
     }
     async function save(e) {
       e.preventDefault();

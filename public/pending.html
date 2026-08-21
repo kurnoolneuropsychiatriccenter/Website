@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pending Medicines - Kurnool Neuro Clinic</title>
+  <script src="js/auth.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Pending Medicines</h1>
+      </div>
+      <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6">
+    <!-- Add new pending item -->
+    <div class="bg-white p-6 rounded-lg shadow mb-6 border-l-4 border-orange-500">
+      <h2 class="text-lg font-bold mb-3"><i class="fa fa-hourglass-half mr-2 text-orange-600"></i> Add a Pending Medicine</h2>
+      <p class="text-xs text-gray-600 mb-3">Use this when a medicine is out of stock but has to be given to the patient later. You can also open a medical bill and click the orange <i class="fa fa-hourglass-half text-orange-600"></i> button on any row.</p>
+      <form onsubmit="addPending(event)" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs font-medium mb-1">Patient Code</label>
+          <input type="text" id="patientCode" placeholder="KNC001000001" class="w-full border px-3 py-2 rounded text-sm uppercase" onblur="loadPatient()" data-testid="pending-patient-code">
+          <p id="patientNameLbl" class="text-xs text-gray-600 mt-1"></p>
+          <input type="hidden" id="patientId">
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">Medicine Name *</label>
+          <input type="text" id="medName" required class="w-full border px-3 py-2 rounded text-sm" data-testid="pending-med-name">
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">Qty *</label>
+          <input type="number" id="qty" min="1" step="1" value="1" required class="w-full border px-3 py-2 rounded text-sm" data-testid="pending-qty">
+        </div>
+        <div class="md:col-span-1">
+          <label class="block text-xs font-medium mb-1">Note</label>
+          <input type="text" id="notes" placeholder="e.g. supplier delay, phone number" class="w-full border px-3 py-2 rounded text-sm" data-testid="pending-notes">
+        </div>
+        <div class="flex items-end">
+          <button type="submit" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded text-sm font-medium w-full" data-testid="add-pending-btn"><i class="fa fa-plus mr-1"></i> Add to Pending</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Filter -->
+    <div class="bg-white p-4 rounded-lg shadow mb-6 flex flex-wrap items-center gap-4">
+      <label class="text-sm font-medium">Show:</label>
+      <label class="text-sm flex items-center gap-1"><input type="radio" name="statusFilter" value="pending" checked onchange="load()" data-testid="filter-pending"> Only Pending</label>
+      <label class="text-sm flex items-center gap-1"><input type="radio" name="statusFilter" value="cleared" onchange="load()" data-testid="filter-cleared"> Cleared</label>
+      <label class="text-sm flex items-center gap-1"><input type="radio" name="statusFilter" value="all" onchange="load()" data-testid="filter-all"> All</label>
+      <div class="flex-1"></div>
+      <span class="text-xs text-gray-600">To clear an item you must know the <b>Delete Password</b>.</span>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-white rounded-lg shadow overflow-x-auto">
+      <table class="w-full text-left border-collapse text-sm" data-testid="pending-table">
+        <thead>
+          <tr class="bg-orange-50 text-orange-900 border-b text-xs">
+            <th class="p-3">Added On</th>
+            <th class="p-3">Patient Code</th>
+            <th class="p-3">Patient Name</th>
+            <th class="p-3">Phone</th>
+            <th class="p-3">Medicine</th>
+            <th class="p-3 text-center">Qty</th>
+            <th class="p-3">Note</th>
+            <th class="p-3">Status</th>
+            <th class="p-3 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="body" class="divide-y">
+          <tr><td colspan="9" class="p-6 text-center text-gray-500">Loading pending medicines...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    async function loadPatient() {
+      const c = document.getElementById('patientCode').value.trim();
+      const lbl = document.getElementById('patientNameLbl');
+      document.getElementById('patientId').value = '';
+      lbl.textContent = '';
+      if (!c) return;
+      const j = await (await fetch(`/api/patients/code/${encodeURIComponent(c)}`)).json();
+      if (j.success && j.data) {
+        document.getElementById('patientId').value = j.data.id;
+        lbl.textContent = `${j.data.patient_name} · ${j.data.mobile || ''}`;
+        lbl.className = 'text-xs text-green-700 mt-1';
+      } else {
+        lbl.textContent = 'Patient not found (you can still add without patient code).';
+        lbl.className = 'text-xs text-red-600 mt-1';
+      }
+    }
+    async function addPending(e) {
+      e.preventDefault();
+      const payload = {
+        patient_id: document.getElementById('patientId').value || null,
+        medicine_name: document.getElementById('medName').value.trim(),
+        qty: parseFloat(document.getElementById('qty').value) || 1,
+        notes: document.getElementById('notes').value.trim()
+      };
+      const j = await (await fetch('/api/pending-medicines', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })).json();
+      if (!j.success) { alert(j.message || 'Failed'); return; }
+      document.getElementById('medName').value = '';
+      document.getElementById('qty').value = '1';
+      document.getElementById('notes').value = '';
+      load();
+    }
+    async function load() {
+      const status = document.querySelector('input[name=statusFilter]:checked').value;
+      const j = await (await fetch(`/api/pending-medicines?status=${status}`)).json();
+      const tbody = document.getElementById('body'); tbody.innerHTML = '';
+      if (!j.success || !j.data.length) {
+        tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-gray-500">No pending medicines.</td></tr>`;
+        return;
+      }
+      j.data.forEach(r => {
+        const badge = r.status === 'cleared'
+          ? '<span class="bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs">Cleared</span>'
+          : '<span class="bg-orange-100 text-orange-800 px-2 py-0.5 rounded text-xs">Pending</span>';
+        const actions = r.status === 'pending'
+          ? `<button onclick="clearPending(${r.id})" class="text-green-700 hover:text-green-900 mr-2" title="Mark as delivered / cleared (needs delete password)" data-testid="clear-pending-${r.id}"><i class="fa fa-check"></i> Clear</button>
+             <button onclick="purgePending(${r.id})" class="text-red-600 hover:text-red-800" title="Wrong entry — delete permanently (needs delete password)" data-testid="purge-pending-${r.id}"><i class="fa fa-trash"></i></button>`
+          : `<span class="text-xs text-gray-500">Cleared on ${r.cleared_at || '--'}</span>`;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="p-3 text-xs">${r.created_at || '--'}</td>
+          <td class="p-3 font-mono text-xs">${r.patient_code || '--'}</td>
+          <td class="p-3">${r.patient_name_snapshot || r.patient_name_current || '--'}</td>
+          <td class="p-3 text-xs">${r.patient_phone_snapshot || r.mobile_current || '--'}</td>
+          <td class="p-3 font-medium">${r.medicine_name}</td>
+          <td class="p-3 text-center font-bold">${r.qty}</td>
+          <td class="p-3 text-xs text-gray-700">${r.notes || ''}</td>
+          <td class="p-3">${badge}</td>
+          <td class="p-3 text-center whitespace-nowrap">${actions}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+    async function askDeletePwd(msg) {
+      const pw = prompt(`${msg}\n\nEnter the Delete Password:`);
+      return pw || null;
+    }
+    async function clearPending(id) {
+      const pw = await askDeletePwd('Mark this pending medicine as DELIVERED / CLEARED?');
+      if (!pw) return;
+      const j = await (await fetch(`/api/pending-medicines/${id}`, { method: 'DELETE', headers: { 'X-Delete-Password': pw } })).json();
+      if (!j.success) { alert(j.message || 'Failed'); return; }
+      load();
+    }
+    async function purgePending(id) {
+      const pw = await askDeletePwd('This will PERMANENTLY delete the pending record (use only for wrong entries).');
+      if (!pw) return;
+      const j = await (await fetch(`/api/pending-medicines/${id}/purge`, { method: 'DELETE', headers: { 'X-Delete-Password': pw } })).json();
+      if (!j.success) { alert(j.message || 'Failed'); return; }
+      load();
+    }
+    load();
+  </script>
+</body>
+</html>

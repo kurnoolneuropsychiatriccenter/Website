@@ -34,6 +34,16 @@ Build a working full-stack Clinic Management System for **Kurnool Neuro Psychiat
 - Daily Expenses, Staff Attendance modules.
 - Refactored all print templates to A4.
 
+### Session 11 — Suppliers, A5 Prints, Full PDF, Pending Medicines (Feb 21, 2026)
+- **Supplier autocomplete + auto-save** — new `/api/suppliers` (GET/POST/DELETE) with case-insensitive upsert by name. Purchase form now shows a datalist so staff pick a saved supplier and GST/FSSAI/PAN/MSME/phone/address auto-fill. Every `POST /api/purchase/save` also silently upserts the supplier so the list grows organically.
+- **Removed the Prod Code column** from Purchase Entry (as requested — it was in the way).
+- **A5 prints for OP & Lab bills** — `@page { size: A5 portrait; margin: 6mm }`. Meta section refactored into single-line `meta-row` rows (label + value inline) so the header block fits comfortably in the top half of the page. Font sizes shrunk consistently across header, table, totals.
+- **Full-data PDF export** — new `GET /api/backup/all-pdf` streams a single multi-section PDF (Patients, Doctors, Medicines, Purchases, Medical / Lab / OP Bills, Pending Medicines, Returns, Expenses, Staff, Attendance) with page numbers. Uses `pdfkit ^0.19.1`. Wired to a new "Download ALL Data as PDF" button in Settings (fetch-blob so auth token is attached).
+- **Pending Medicines module** — new `pending_medicines` table + REST endpoints. In Medical Bill form, each row gets an orange hourglass button that pops up a confirm and saves the medicine (name + qty + optional note) to pending, tied to the current patient. Dedicated `/pending.html` page lists everything, filter by pending/cleared/all, and Clear/Purge actions require the Delete password.
+- **Dashboard**: new `nav-pending` card next to Medicine Return.
+- **Backup download fix**: `Download Backup File` link converted to fetch-blob so it works with the auth wrapper.
+- Tests: `/app/backend/tests/test_suppliers_pending_pdf.py` (12/12 pass). Combined 33/33 pass with prior iterations. Report `/app/test_reports/iteration_11.json`.
+
 ### Session 10 — Danger Zone Email Gate (Feb 19, 2026)
 - **Destructive actions now require a 6-digit code emailed via Gmail SMTP** to `settings.recovery_email` (`shaikabuzarrahiman@gmail.com`). Staff can no longer accidentally wipe the DB by clicking a button.
 - New backend endpoints:

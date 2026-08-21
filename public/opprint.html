@@ -12,40 +12,41 @@
     .bill-sheet {
       background: #ffffff;
       color: #000000;
-      width: 210mm;
-      min-height: 297mm;
+      width: 148mm;
+      min-height: 210mm;
       margin: 20px auto;
-      padding: 14mm 16mm;
+      padding: 8mm 10mm;
       box-shadow: 0 4px 16px rgba(0,0,0,0.08);
       font-family: 'Helvetica Neue', Arial, sans-serif;
     }
     .header-title {
       text-align: center;
-      font-size: 26px;
+      font-size: 17px;
       font-weight: 800;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.3px;
     }
-    .header-sub { text-align: center; font-size: 13px; margin-top: 6px; color: #333; }
-    .header-phone { text-align: center; font-size: 13px; margin-top: 2px; color: #333; }
-    .divider { border-bottom: 2px solid #0f3d8f; margin: 14px 0 22px; }
-    .meta { display: grid; grid-template-columns: 1fr 1fr; row-gap: 18px; column-gap: 60px; margin-bottom: 26px; font-size: 13px; }
-    .meta .lbl { color: #444; font-size: 13px; }
-    .meta .val { font-size: 15px; padding-top: 2px; color: #000; min-height: 20px; }
-    table.items { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; border: 1px solid #d1d5db; }
-    table.items thead th { background: #f3f4f6; padding: 10px 12px; text-align: center; font-weight: 700; border: 1px solid #d1d5db; }
-    table.items tbody td { padding: 12px; border: 1px solid #e5e7eb; }
+    .header-sub { text-align: center; font-size: 10px; margin-top: 2px; color: #333; }
+    .header-phone { text-align: center; font-size: 10px; margin-top: 1px; color: #333; }
+    .divider { border-bottom: 1.5px solid #0f3d8f; margin: 6px 0 8px; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; row-gap: 4px; column-gap: 16px; margin-bottom: 8px; font-size: 11px; }
+    .meta-row { display: flex; align-items: baseline; }
+    .meta-row .lbl { color: #444; font-size: 10.5px; min-width: 74px; }
+    .meta-row .val { font-size: 11.5px; color: #000; font-weight: 500; }
+    table.items { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; border: 1px solid #d1d5db; }
+    table.items thead th { background: #f3f4f6; padding: 5px 8px; text-align: center; font-weight: 700; border: 1px solid #d1d5db; }
+    table.items tbody td { padding: 6px 8px; border: 1px solid #e5e7eb; }
     table.items td.num { text-align: right; }
-    table.items td.name { padding-left: 14px; }
+    table.items td.name { padding-left: 10px; }
     .totals-wrap { display: flex; justify-content: flex-end; margin-top: -1px; }
-    .totals-wrap table { border-collapse: collapse; font-size: 13px; width: 340px; }
-    .totals-wrap td { padding: 10px 12px; border: 1px solid #d1d5db; }
+    .totals-wrap table { border-collapse: collapse; font-size: 11px; width: 230px; }
+    .totals-wrap td { padding: 5px 8px; border: 1px solid #d1d5db; }
     .totals-wrap .lbl { background: #f9fafb; }
     .totals-wrap .val { text-align: right; }
-    .totals-wrap .grand td { font-weight: 800; font-size: 14px; background: #f3f4f6; }
-    .footer-note { margin-top: 28px; font-size: 12px; color: #333; }
+    .totals-wrap .grand td { font-weight: 800; font-size: 12px; background: #f3f4f6; }
+    .footer-note { margin-top: 12px; font-size: 10px; color: #333; text-align: center; }
 
     @media print {
-      @page { size: A4 portrait; margin: 10mm; }
+      @page { size: A5 portrait; margin: 6mm; }
       body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .no-print { display: none !important; }
       .bill-sheet { box-shadow: none; margin: 0; padding: 0; width: auto; min-height: auto; }
@@ -62,41 +63,14 @@
 
     <!-- Bill Meta -->
     <div class="meta">
-      <div>
-        <div class="lbl">Name :</div>
-        <div class="val" id="patientName">--</div>
-      </div>
-      <div>
-        <div class="lbl">Date :</div>
-        <div class="val" id="opDate">--</div>
-      </div>
-
-      <div>
-        <div class="lbl">Patient Code :</div>
-        <div class="val" id="patientCode">--</div>
-      </div>
-      <div>
-        <div class="lbl">Age :</div>
-        <div class="val" id="age">--</div>
-      </div>
-
-      <div>
-        <div class="lbl">Phone :</div>
-        <div class="val" id="phone">--</div>
-      </div>
-      <div>
-        <div class="lbl">Token :</div>
-        <div class="val" id="token">--</div>
-      </div>
-
-      <div>
-        <div class="lbl">Referred By :</div>
-        <div class="val" id="referredBy">--</div>
-      </div>
-      <div>
-        <div class="lbl">Invoice No :</div>
-        <div class="val" id="invoiceNo">--</div>
-      </div>
+      <div class="meta-row"><span class="lbl">Name :</span><span class="val" id="patientName">--</span></div>
+      <div class="meta-row"><span class="lbl">Date :</span><span class="val" id="opDate">--</span></div>
+      <div class="meta-row"><span class="lbl">Patient Code :</span><span class="val" id="patientCode">--</span></div>
+      <div class="meta-row"><span class="lbl">Age :</span><span class="val" id="age">--</span></div>
+      <div class="meta-row"><span class="lbl">Phone :</span><span class="val" id="phone">--</span></div>
+      <div class="meta-row"><span class="lbl">Token :</span><span class="val" id="token">--</span></div>
+      <div class="meta-row"><span class="lbl">Referred By :</span><span class="val" id="referredBy">--</span></div>
+      <div class="meta-row"><span class="lbl">Invoice No :</span><span class="val" id="invoiceNo">--</span></div>
     </div>
 
     <!-- Items -->

@@ -31,7 +31,10 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div><label class="block text-xs font-medium mb-1">Invoice No *</label><input type="text" id="invoiceNo" required class="w-full border px-3 py-2 rounded text-sm" data-testid="invoice-no-input"></div>
           <div><label class="block text-xs font-medium mb-1">Invoice Date *</label><input type="date" id="invoiceDate" required class="w-full border px-3 py-2 rounded text-sm" data-testid="invoice-date-input"></div>
-          <div><label class="block text-xs font-medium mb-1">Supplier Name *</label><input type="text" id="supplierName" required class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-name-input"></div>
+          <div><label class="block text-xs font-medium mb-1">Supplier Name * <span class="text-gray-400 text-xs">(type or pick a saved one)</span></label>
+            <input type="text" id="supplierName" list="supplierList" oninput="onSupplierChoose()" required class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-name-input" autocomplete="off">
+            <datalist id="supplierList"></datalist>
+          </div>
 
           <div><label class="block text-xs font-medium mb-1">GST Number</label><input type="text" id="supGst" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-gst-input"></div>
           <div><label class="block text-xs font-medium mb-1">FSSAI Number</label><input type="text" id="supFssai" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-fssai-input"></div>
@@ -54,7 +57,6 @@
             <thead>
               <tr class="bg-blue-50 text-blue-900 border-b">
                 <th class="p-2 w-8">S.No</th>
-                <th class="p-2">Prod Code</th>
                 <th class="p-2">Qty</th>
                 <th class="p-2">Package</th>
                 <th class="p-2">Product</th>
@@ -100,11 +102,27 @@
 
   <script>
     let allMedicines = [];
+    let allSuppliers = [];
     async function init() {
       document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
       const j = await (await fetch('/api/medicines')).json();
       allMedicines = j.data || [];
+      const sj = await (await fetch('/api/suppliers')).json();
+      allSuppliers = sj.data || [];
+      const dl = document.getElementById('supplierList');
+      dl.innerHTML = allSuppliers.map(s => `<option value="${s.supplier_name.replace(/"/g, '&quot;')}"></option>`).join('');
       addRow();
+    }
+    function onSupplierChoose() {
+      const name = document.getElementById('supplierName').value.trim();
+      const s = allSuppliers.find(x => x.supplier_name.toLowerCase() === name.toLowerCase());
+      if (!s) return;
+      document.getElementById('supGst').value = s.gst_number || '';
+      document.getElementById('supFssai').value = s.fssai_number || '';
+      document.getElementById('supPan').value = s.pan_number || '';
+      document.getElementById('supMsme').value = s.msme_number || '';
+      document.getElementById('supPhone').value = s.phone || '';
+      document.getElementById('supAddress').value = s.address || '';
     }
     function addRow() {
       const tbody = document.getElementById('rowsBody');
@@ -115,7 +133,6 @@
       allMedicines.forEach(m => opt += `<option value="${m.id}" data-hsn="${m.hsn_number||''}" data-code="${m.product_code||''}">${m.medicine_name}${m.product_code ? ' ('+m.product_code+')' : ''}</option>`);
       tr.innerHTML = `
         <td class="p-1 sno-cell font-semibold">1</td>
-        <td class="p-1"><input type="text" placeholder="Code" class="border w-20 px-1 py-1 rounded pcode" onchange="onCode('${rid}')" data-testid="pur-code"></td>
         <td class="p-1"><input type="number" min="0" step="0.01" value="1" class="border w-16 px-1 py-1 rounded qty" oninput="calc('${rid}')" required data-testid="pur-qty"></td>
         <td class="p-1"><input type="text" placeholder="10*10" class="border w-20 px-1 py-1 rounded pack" data-testid="pur-pack"></td>
         <td class="p-1"><select class="border w-40 px-1 py-1 rounded med" onchange="onMed('${rid}')" required data-testid="pur-med">${opt}</select></td>
@@ -139,39 +156,6 @@
       const opt = sel.options[sel.selectedIndex];
       if (opt.value) tr.querySelector('.hsn').value = opt.getAttribute('data-hsn') || '';
       calc(rid);
-    }
-
-    async function onCode(rid) {
-      const tr = document.getElementById(rid);
-      const code = (tr.querySelector('.pcode').value || '').trim();
-      if (!code) return;
-      try {
-        const r = await fetch(`/api/medicines/code/${encodeURIComponent(code)}`);
-        const j = await r.json();
-        if (!j.success) { alert('No medicine found for code "' + code + '". Please add it in the Medicines master first.'); return; }
-        const m = j.data;
-        // ensure the medicine appears in the dropdown (it always does since we load all medicines up-front)
-        const sel = tr.querySelector('.med');
-        let matched = false;
-        for (let i = 0; i < sel.options.length; i++) {
-          if (String(sel.options[i].value) === String(m.id)) { sel.selectedIndex = i; matched = true; break; }
-        }
-        if (!matched) {
-          // rare fallback: add the option on the fly
-          const o = document.createElement('option');
-          o.value = m.id; o.textContent = m.medicine_name;
-          o.setAttribute('data-hsn', m.hsn_number || '');
-          sel.appendChild(o); sel.value = m.id;
-        }
-        tr.querySelector('.hsn').value = m.hsn_number || '';
-        tr.querySelector('.mrp').value = m.mrp || 0;
-        tr.querySelector('.rate').value = m.rate || 0;
-        if (m.batch_number) tr.querySelector('.batch').value = m.batch_number;
-        if (m.expiry_date) tr.querySelector('.expiry').value = m.expiry_date;
-        calc(rid);
-      } catch (e) {
-        alert('Lookup error: ' + e.message);
-      }
     }
     function calc(rid) {
       const tr = document.getElementById(rid);
