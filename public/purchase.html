@@ -3,8 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f3d8f">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Purchase Entry</title>
   <script src="js/auth.js"></script>
+  <script src="js/medicine-autocomplete.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -129,13 +133,11 @@
       const rid = 'r' + Date.now() + Math.floor(Math.random() * 999);
       const tr = document.createElement('tr');
       tr.id = rid;
-      let opt = '<option value="">Select</option>';
-      allMedicines.forEach(m => opt += `<option value="${m.id}" data-hsn="${m.hsn_number||''}" data-code="${m.product_code||''}">${m.medicine_name}${m.product_code ? ' ('+m.product_code+')' : ''}</option>`);
       tr.innerHTML = `
         <td class="p-1 sno-cell font-semibold">1</td>
         <td class="p-1"><input type="number" min="0" step="0.01" value="1" class="border w-16 px-1 py-1 rounded qty" oninput="calc('${rid}')" required data-testid="pur-qty"></td>
         <td class="p-1"><input type="text" placeholder="10*10" class="border w-20 px-1 py-1 rounded pack" data-testid="pur-pack"></td>
-        <td class="p-1"><select class="border w-40 px-1 py-1 rounded med" onchange="onMed('${rid}')" required data-testid="pur-med">${opt}</select></td>
+        <td class="p-1"><input type="text" class="border w-40 px-1 py-1 rounded med" placeholder="Type first letters..." required data-testid="pur-med"></td>
         <td class="p-1"><input type="text" class="border w-20 px-1 py-1 rounded batch" data-testid="pur-batch"></td>
         <td class="p-1"><input type="text" placeholder="MM/YY" class="border w-20 px-1 py-1 rounded expiry" data-testid="pur-expiry"></td>
         <td class="p-1"><input type="text" class="border w-20 px-1 py-1 rounded hsn" data-testid="pur-hsn"></td>
@@ -147,16 +149,21 @@
         <td class="p-1 amount text-right font-semibold">0.00</td>
         <td class="p-1 text-center"><button type="button" onclick="rm('${rid}')" class="text-red-600" data-testid="pur-remove"><i class="fa fa-trash"></i></button></td>`;
       tbody.appendChild(tr);
+      const medInput = tr.querySelector('.med');
+      MedicineAutocomplete.attach(medInput, allMedicines, {
+        showStock: true,
+        onSelect: (m) => {
+          tr.querySelector('.hsn').value = m.hsn_number || '';
+          if (m.batch_number && !tr.querySelector('.batch').value) tr.querySelector('.batch').value = m.batch_number;
+          if (m.mrp && !parseFloat(tr.querySelector('.mrp').value)) tr.querySelector('.mrp').value = m.mrp;
+          if (m.rate && !parseFloat(tr.querySelector('.rate').value)) tr.querySelector('.rate').value = m.rate;
+          tr._selectedMed = m;
+          calc(rid);
+        }
+      });
       renum();
     }
     function renum() { document.querySelectorAll('#rowsBody tr').forEach((t,i) => t.querySelector('.sno-cell').innerText=i+1); }
-    function onMed(rid) {
-      const tr = document.getElementById(rid);
-      const sel = tr.querySelector('.med');
-      const opt = sel.options[sel.selectedIndex];
-      if (opt.value) tr.querySelector('.hsn').value = opt.getAttribute('data-hsn') || '';
-      calc(rid);
-    }
     function calc(rid) {
       const tr = document.getElementById(rid);
       const qty = parseFloat(tr.querySelector('.qty').value)||0;
@@ -201,7 +208,8 @@
       const items = [];
       let valid = true;
       document.querySelectorAll('#rowsBody tr').forEach(tr => {
-        const mid = tr.querySelector('.med').value;
+        const medInput = tr.querySelector('.med');
+        const mid = medInput.dataset.medicineId || '';
         const qty = parseFloat(tr.querySelector('.qty').value);
         const rate = parseFloat(tr.querySelector('.rate').value);
         if (!mid || isNaN(qty) || qty<=0 || isNaN(rate)) valid = false;
@@ -217,7 +225,7 @@
           igst_percent: parseFloat(tr.querySelector('.igst').value)||0
         });
       });
-      if (!valid) { alert('Every row needs Medicine + Qty + Rate.'); return; }
+      if (!valid) { alert('Every row needs a Medicine picked from the dropdown + Qty + Rate.'); return; }
       const payload = {
         invoice_no: document.getElementById('invoiceNo').value,
         invoice_date: document.getElementById('invoiceDate').value,

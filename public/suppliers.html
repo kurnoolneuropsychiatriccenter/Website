@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f3d8f">
+  <title>Suppliers - Kurnool Neuro-ENT</title>
+  <script src="js/auth.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <header class="bg-blue-900 text-white shadow-md">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="text-blue-300 hover:text-white text-xl"><i class="fa fa-arrow-left"></i></a>
+        <h1 class="text-xl font-bold">Suppliers</h1>
+      </div>
+      <a href="index.html" class="bg-blue-800 px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"><i class="fa fa-home mr-1"></i> Dashboard</a>
+    </div>
+  </header>
+
+  <div class="container mx-auto px-4 py-6 max-w-6xl">
+    <!-- Add / Edit form -->
+    <div class="bg-white p-6 rounded-lg shadow mb-6 border-l-4 border-blue-500">
+      <h2 class="text-lg font-bold mb-4"><i class="fa fa-truck mr-2 text-blue-600"></i> <span id="formTitle">Add a Supplier</span></h2>
+      <form onsubmit="saveSupplier(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <input type="hidden" id="supplierId">
+        <div class="md:col-span-2">
+          <label class="block text-xs font-medium mb-1">Supplier Name *</label>
+          <input type="text" id="fName" required class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-form-name">
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">Phone Number</label>
+          <input type="tel" id="fPhone" pattern="[-0-9+ ]*" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-form-phone">
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">GST Number</label>
+          <input type="text" id="fGst" class="w-full border px-3 py-2 rounded text-sm uppercase" data-testid="supplier-form-gst">
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">PAN Number</label>
+          <input type="text" id="fPan" class="w-full border px-3 py-2 rounded text-sm uppercase" data-testid="supplier-form-pan">
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">FSSAI Number</label>
+          <input type="text" id="fFssai" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-form-fssai">
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">MSME Number</label>
+          <input type="text" id="fMsme" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-form-msme">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-xs font-medium mb-1">Address</label>
+          <input type="text" id="fAddress" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-form-address">
+        </div>
+        <div class="md:col-span-3 flex gap-2 justify-end">
+          <button type="button" onclick="resetForm()" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded text-sm font-medium" data-testid="supplier-form-reset">Cancel</button>
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded text-sm font-bold" data-testid="supplier-form-save"><i class="fa fa-save mr-1"></i> Save Supplier</button>
+        </div>
+      </form>
+      <p id="formMsg" class="text-xs mt-2"></p>
+    </div>
+
+    <!-- List -->
+    <div class="bg-white p-4 rounded-lg shadow mb-4 flex flex-wrap items-center gap-3">
+      <input type="text" id="searchInput" placeholder="Search by name or GST..." class="border px-3 py-2 rounded text-sm w-72" oninput="load()" data-testid="supplier-search-input">
+      <span class="text-xs text-gray-500 ml-auto" id="countLbl">--</span>
+    </div>
+    <div class="bg-white rounded-lg shadow overflow-x-auto">
+      <table class="w-full text-left border-collapse text-sm" data-testid="suppliers-table">
+        <thead>
+          <tr class="bg-blue-50 text-blue-900 border-b text-xs">
+            <th class="p-3">Supplier Name</th>
+            <th class="p-3">Phone</th>
+            <th class="p-3">GST</th>
+            <th class="p-3">PAN</th>
+            <th class="p-3">FSSAI</th>
+            <th class="p-3">MSME</th>
+            <th class="p-3">Address</th>
+            <th class="p-3 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="body" class="divide-y">
+          <tr><td colspan="8" class="p-6 text-center text-gray-500">Loading suppliers...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    async function saveSupplier(e) {
+      e.preventDefault();
+      const payload = {
+        supplier_name: document.getElementById('fName').value.trim(),
+        supplier_phone: document.getElementById('fPhone').value.trim(),
+        supplier_gst: document.getElementById('fGst').value.trim(),
+        supplier_pan: document.getElementById('fPan').value.trim(),
+        supplier_fssai: document.getElementById('fFssai').value.trim(),
+        supplier_msme: document.getElementById('fMsme').value.trim(),
+        supplier_address: document.getElementById('fAddress').value.trim()
+      };
+      const j = await (await fetch('/api/suppliers', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      })).json();
+      const msg = document.getElementById('formMsg');
+      if (j.success) {
+        msg.textContent = '✔ Supplier saved successfully.';
+        msg.className = 'text-xs mt-2 text-green-700';
+        resetForm();
+        load();
+      } else {
+        msg.textContent = '✘ ' + (j.message || 'Failed to save');
+        msg.className = 'text-xs mt-2 text-red-600';
+      }
+    }
+    function resetForm() {
+      document.getElementById('supplierId').value = '';
+      document.getElementById('fName').value = '';
+      document.getElementById('fPhone').value = '';
+      document.getElementById('fGst').value = '';
+      document.getElementById('fPan').value = '';
+      document.getElementById('fFssai').value = '';
+      document.getElementById('fMsme').value = '';
+      document.getElementById('fAddress').value = '';
+      document.getElementById('formTitle').textContent = 'Add a Supplier';
+      document.getElementById('formMsg').textContent = '';
+    }
+    function editSupplier(s) {
+      document.getElementById('supplierId').value = s.id;
+      document.getElementById('fName').value = s.supplier_name || '';
+      document.getElementById('fPhone').value = s.phone || '';
+      document.getElementById('fGst').value = s.gst_number || '';
+      document.getElementById('fPan').value = s.pan_number || '';
+      document.getElementById('fFssai').value = s.fssai_number || '';
+      document.getElementById('fMsme').value = s.msme_number || '';
+      document.getElementById('fAddress').value = s.address || '';
+      document.getElementById('formTitle').textContent = 'Edit Supplier — ' + (s.supplier_name || '');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    async function load() {
+      const q = document.getElementById('searchInput').value.trim();
+      const j = await (await fetch(`/api/suppliers${q ? '?search=' + encodeURIComponent(q) : ''}`)).json();
+      const tbody = document.getElementById('body'); tbody.innerHTML = '';
+      const data = j.data || [];
+      document.getElementById('countLbl').textContent = `${data.length} supplier${data.length===1?'':'s'}`;
+      if (!data.length) { tbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-gray-500">No suppliers saved yet. Add one using the form above.</td></tr>`; return; }
+      data.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="p-3 font-semibold">${s.supplier_name || ''}</td>
+          <td class="p-3">${s.phone || '-'}</td>
+          <td class="p-3 font-mono text-xs">${s.gst_number || '-'}</td>
+          <td class="p-3 font-mono text-xs">${s.pan_number || '-'}</td>
+          <td class="p-3 text-xs">${s.fssai_number || '-'}</td>
+          <td class="p-3 text-xs">${s.msme_number || '-'}</td>
+          <td class="p-3 text-xs">${s.address || '-'}</td>
+          <td class="p-3 text-center whitespace-nowrap">
+            <button onclick='editSupplier(${JSON.stringify(s)})' class="text-blue-600 hover:text-blue-800 mr-2" title="Edit" data-testid="edit-supplier-${s.id}"><i class="fa fa-edit"></i></button>
+            <button onclick="del(${s.id})" class="text-red-600 hover:text-red-800" title="Delete (needs delete password)" data-testid="delete-supplier-${s.id}"><i class="fa fa-trash"></i></button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+    }
+    async function del(id) {
+      if (!confirm('Delete this supplier from the master list?')) return;
+      const j = await (await fetch(`/api/suppliers/${id}`, { method: 'DELETE' })).json();
+      if (j.success) load(); else alert(j.message || 'Failed');
+    }
+    load();
+  </script>
+</body>
+</html>

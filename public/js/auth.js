@@ -53,4 +53,11 @@
     sessionStorage.removeItem(TOKEN_KEY);
     location.replace('login.html');
   };
+
+  // Register PWA service worker so the browser offers "Install as desktop app".
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
 })();

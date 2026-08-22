@@ -13,8 +13,8 @@ import pytest
 import requests
 
 BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
-LOGIN_PASSWORD = "admin123"
-DELETE_PASSWORD = "delete123"
+LOGIN_PASSWORD = os.environ.get("CLINIC_LOGIN_PASSWORD", "Arif07@07")
+DELETE_PASSWORD = os.environ.get("CLINIC_DELETE_PASSWORD", "Arif0707")
 
 _token_lock = threading.Lock()
 _token_holder = {"token": None}

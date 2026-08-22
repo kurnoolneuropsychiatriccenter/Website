@@ -1067,17 +1067,15 @@ app.post('/api/medicalbill/save', (req, res) => {
             const bill_no = `MED-${dateStr.replace(/-/g, '')}-${String(billNoNum).padStart(4, '0')}`;
             const finalInvoiceNo = invoice_no || `INV${String(1000 + billNoNum)}`;
 
-            const taxPct = tax_percent != null && tax_percent !== '' ? parseFloat(tax_percent) : DEFAULT_TAX;
+            const taxPct = 0;   // MRP is tax-inclusive — no additional tax applied on medical bills
 
-            // Compute per-item amount: qty * mrp * (1 + tax%/100) OR use rate then add tax
+            // Compute per-item amount: qty * MRP directly (MRP is tax-inclusive)
             let subtotal = 0;
             items.forEach(i => {
               const q = parseFloat(i.qty) || 0;
               const r = parseFloat(i.rate != null && i.rate !== '' ? i.rate : i.mrp) || 0;   // rate defaults to MRP
-              const base = q * r;
-              const tax_amount = +(base * taxPct / 100).toFixed(2);
-              const amt = +(base + tax_amount).toFixed(2);
-              i._computed = { tax_amount, amount: amt };
+              const amt = +(q * r).toFixed(2);
+              i._computed = { tax_amount: 0, amount: amt };
               subtotal += amt;
             });
             subtotal = +subtotal.toFixed(2);
@@ -1347,12 +1345,23 @@ app.post('/api/pending-medicines', (req, res) => {
   }
 });
 
-// Mark a pending item as cleared (delivered / paid). Requires delete password (enforced by global middleware since it's a DELETE).
+// Mark a pending item as cleared (delivered / paid). Requires delete password.
+// Also DEDUCTS stock if the pending medicine_name matches a known medicine.
 app.delete('/api/pending-medicines/:id', (req, res) => {
-  db.run(`UPDATE pending_medicines SET status = 'cleared', cleared_at = datetime('now', 'localtime') WHERE id = ?`, [req.params.id], function(err) {
+  db.get(`SELECT * FROM pending_medicines WHERE id = ? AND status = 'pending'`, [req.params.id], (err, row) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
-    if (this.changes === 0) return res.status(404).json({ success: false, message: 'Not found' });
-    res.json({ success: true, message: 'Pending medicine cleared' });
+    if (!row) return res.status(404).json({ success: false, message: 'Pending record not found or already cleared' });
+    db.serialize(() => {
+      db.run(`UPDATE pending_medicines SET status = 'cleared', cleared_at = datetime('now', 'localtime') WHERE id = ?`, [req.params.id]);
+      // Try to deduct stock from the master medicines table by name (case-insensitive)
+      db.run(
+        `UPDATE medicines SET current_stock = MAX(current_stock - ?, 0) WHERE medicine_name = ? COLLATE NOCASE`,
+        [row.qty || 0, row.medicine_name || ''],
+        function() {
+          res.json({ success: true, message: 'Pending medicine cleared. Stock reduced by ' + (row.qty || 0) + ' where applicable.' });
+        }
+      );
+    });
   });
 });
 
@@ -1640,17 +1649,19 @@ app.post('/api/staff/attendance', (req, res) => {
   // entries: [{staff_id, status}, ...]
   const dateStr = attendance_date || getTodayDate();
   if (!entries || !entries.length) return res.status(400).json({ success: false, message: 'No attendance entries' });
-  let done = 0, hadErr = false;
+  let done = 0, hadErr = false, savedCount = 0, skippedCount = 0;
   entries.forEach(e => {
-    db.run(`INSERT INTO staff_attendance (staff_id, attendance_date, status) VALUES (?, ?, ?)
-            ON CONFLICT(staff_id, attendance_date) DO UPDATE SET status = excluded.status`,
+    // INSERT OR IGNORE — once a row exists for (staff_id, attendance_date) it becomes IMMUTABLE.
+    db.run(`INSERT OR IGNORE INTO staff_attendance (staff_id, attendance_date, status) VALUES (?, ?, ?)`,
       [e.staff_id, dateStr, e.status || 'Absent'],
-      (err) => {
+      function(err) {
         if (err) hadErr = true;
+        if (this.changes === 1) savedCount++; else skippedCount++;
         done++;
         if (done === entries.length) {
           if (hadErr) return res.status(500).json({ success: false, message: 'Failed to save attendance' });
-          res.json({ success: true, message: 'Attendance saved', data: { attendance_date: dateStr } });
+          const msg = savedCount + ' saved (locked).' + (skippedCount ? ' ' + skippedCount + ' already recorded — cannot be changed.' : '');
+          res.json({ success: true, message: msg, data: { attendance_date: dateStr, saved: savedCount, already_locked: skippedCount } });
         }
       });
   });
@@ -1665,6 +1676,31 @@ app.get('/api/staff/attendance', (req, res) => {
   db.all(q, params, (err, rows) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     res.json({ success: true, data: rows });
+  });
+});
+
+// Monthly summary — how many Present / Half-day / Absent days per staff for a month (YYYY-MM)
+app.get('/api/staff/attendance/monthly-summary', (req, res) => {
+  const month = (req.query.month || getTodayDate().slice(0, 7)).trim(); // YYYY-MM
+  const from = `${month}-01`;
+  const to = `${month}-31`;
+  db.all(`
+    SELECT s.id AS staff_id, s.staff_name, s.role, s.mobile,
+           SUM(CASE WHEN sa.status = 'Present'  THEN 1 ELSE 0 END) AS present_days,
+           SUM(CASE WHEN sa.status = 'Half-day' THEN 1 ELSE 0 END) AS half_days,
+           SUM(CASE WHEN sa.status = 'Absent'   THEN 1 ELSE 0 END) AS absent_days,
+           COUNT(sa.id) AS total_marked
+    FROM staff s
+    LEFT JOIN staff_attendance sa
+      ON sa.staff_id = s.id AND sa.attendance_date BETWEEN ? AND ?
+    WHERE s.status = 'Active' OR s.status IS NULL
+    GROUP BY s.id
+    ORDER BY s.staff_name COLLATE NOCASE
+  `, [from, to], (err, rows) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    // Add total present_equivalent (present + 0.5 half-day) for convenience
+    rows.forEach(r => { r.present_equivalent = +((r.present_days || 0) + 0.5 * (r.half_days || 0)).toFixed(1); });
+    res.json({ success: true, data: { month, staff: rows } });
   });
 });
 

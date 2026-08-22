@@ -3,8 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f3d8f">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Medical Billing - Asha Medicals</title>
   <script src="js/auth.js"></script>
+  <script src="js/medicine-autocomplete.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -48,7 +52,8 @@
           <div><label class="block text-sm font-medium mb-1">Date *</label><input type="date" id="billDate" required class="w-full border px-3 py-2 rounded text-sm" data-testid="bill-date-input"></div>
           <div><label class="block text-sm font-medium mb-1">Town</label><input id="town" class="w-full border px-3 py-2 rounded text-sm" data-testid="town-input"></div>
           <div><label class="block text-sm font-medium mb-1">Invoice No</label><input id="invoiceNo" placeholder="Auto (e.g. INV1002)" class="w-full border px-3 py-2 rounded text-sm" data-testid="invoice-no-input"></div>
-          <div><label class="block text-sm font-medium mb-1">Tax %</label><input type="number" id="taxPercent" value="5" min="0" step="0.5" class="w-full border px-3 py-2 rounded text-sm" oninput="calcAll()" data-testid="tax-input"><p class="text-xs text-gray-500 mt-1">Applied to every medicine (default 5%).</p></div>
+          <input type="hidden" id="taxPercent" value="0">
+          <div class="text-xs bg-green-50 border border-green-200 rounded p-2 text-green-800"><i class="fa fa-check-circle mr-1"></i> MRP is <b>tax-inclusive</b>. Amount = Qty × MRP. No extra tax is added.</div>
         </div>
       </div>
 
@@ -67,8 +72,7 @@
                 <th class="p-2">HSN No.</th>
                 <th class="p-2">Batch</th>
                 <th class="p-2">Qty <span class="text-gray-500">(stock)</span></th>
-                <th class="p-2">MRP</th>
-                <th class="p-2">Tax</th>
+                <th class="p-2">MRP <span class="text-gray-500 text-[10px]">(incl. tax)</span></th>
                 <th class="p-2">Amount</th>
                 <th class="p-2 w-8"></th>
               </tr>
@@ -136,49 +140,45 @@
       const tbody = document.getElementById('rowsBody');
       const rid = 'r' + Date.now() + Math.floor(Math.random()*999);
       const tr = document.createElement('tr'); tr.id = rid;
-      let opt = '<option value="">Select</option>';
-      allMed.forEach(m => opt += `<option value="${m.id}" data-mrp="${m.mrp||0}" data-stock="${m.current_stock||0}" data-batch="${m.batch_number||''}" data-hsn="${m.hsn_number||''}">${m.medicine_name} [Stock:${m.current_stock||0}]</option>`);
       tr.innerHTML = `
         <td class="p-1 sno-cell font-semibold">1</td>
-        <td class="p-1"><select class="border px-1 py-1 rounded text-xs w-44 med" onchange="onMed('${rid}')" required data-testid="bill-med-select">${opt}</select></td>
+        <td class="p-1"><input type="text" class="border px-1 py-1 rounded text-xs w-44 med" placeholder="Type first letters..." required data-testid="bill-med-input"></td>
         <td class="p-1"><input type="text" class="border px-1 py-1 rounded text-xs w-16 pack" placeholder="10x10" data-testid="bill-pack-input"></td>
         <td class="p-1"><input type="text" class="border px-1 py-1 rounded text-xs w-16 hsn" data-testid="bill-hsn-input"></td>
         <td class="p-1"><input type="text" class="border px-1 py-1 rounded text-xs w-16 batch" data-testid="bill-batch-input"></td>
         <td class="p-1"><input type="number" min="1" value="1" class="border px-1 py-1 rounded text-xs w-14 qty" oninput="calcRow('${rid}')" required data-testid="bill-qty-input"><div class="text-[10px] text-gray-500 stock-display">stock: 0</div></td>
         <td class="p-1"><input type="number" step="0.01" min="0" value="0" class="border px-1 py-1 rounded text-xs w-16 mrp" oninput="calcRow('${rid}')" data-testid="bill-mrp-input"></td>
-        <td class="p-1 tax-display text-xs">0.00</td>
+        <td class="p-1 tax-display hidden">0.00</td>
         <td class="p-1 amount text-right font-semibold text-xs">0.00</td>
         <td class="p-1 text-center whitespace-nowrap">
           <button type="button" onclick="saveRowPending('${rid}')" class="text-orange-600 hover:text-orange-800 mr-1" title="Out of stock? Save this medicine as PENDING for this patient" data-testid="bill-pending-btn"><i class="fa fa-hourglass-half"></i></button>
           <button type="button" onclick="rm('${rid}')" class="text-red-600" data-testid="bill-remove-btn"><i class="fa fa-trash"></i></button>
         </td>`;
       tbody.appendChild(tr);
+      const medInput = tr.querySelector('.med');
+      MedicineAutocomplete.attach(medInput, allMed, {
+        showStock: true,
+        onSelect: (m) => {
+          tr.querySelector('.mrp').value = m.mrp || 0;
+          tr.querySelector('.batch').value = m.batch_number || '';
+          tr.querySelector('.hsn').value = m.hsn_number || '';
+          tr.querySelector('.stock-display').innerText = 'stock: ' + (m.current_stock || 0);
+          tr._selectedMed = m;
+          calcRow(rid);
+        }
+      });
       renum();
     }
     function renum() { document.querySelectorAll('#rowsBody tr').forEach((t,i)=>t.querySelector('.sno-cell').innerText=i+1); }
-    function onMed(rid) {
-      const tr = document.getElementById(rid);
-      const opt = tr.querySelector('.med').options[tr.querySelector('.med').selectedIndex];
-      if (opt.value) {
-        tr.querySelector('.mrp').value = opt.getAttribute('data-mrp')||0;
-        tr.querySelector('.batch').value = opt.getAttribute('data-batch')||'';
-        tr.querySelector('.hsn').value = opt.getAttribute('data-hsn')||'';
-        tr.querySelector('.stock-display').innerText = 'stock: ' + (opt.getAttribute('data-stock')||0);
-      }
-      calcRow(rid);
-    }
     function calcRow(rid) {
       const tr = document.getElementById(rid);
-      const opt = tr.querySelector('.med').options[tr.querySelector('.med').selectedIndex];
-      const stock = opt.value ? parseFloat(opt.getAttribute('data-stock'))||0 : Infinity;
+      const med = tr._selectedMed;
+      const stock = med ? parseFloat(med.current_stock) || 0 : Infinity;
       let qty = parseFloat(tr.querySelector('.qty').value)||0;
       if (qty > stock) { alert(`Insufficient stock! Only ${stock} available.`); tr.querySelector('.qty').value = stock; qty = stock; }
       const mrp = parseFloat(tr.querySelector('.mrp').value)||0;
-      const taxPct = parseFloat(document.getElementById('taxPercent').value)||0;
-      const base = qty * mrp;
-      const tax = +(base * taxPct/100).toFixed(2);
-      const amt = +(base + tax).toFixed(2);
-      tr.querySelector('.tax-display').innerText = tax.toFixed(2);
+      // MRP is tax-inclusive — amount is simply qty × mrp
+      const amt = +(qty * mrp).toFixed(2);
       tr.querySelector('.amount').innerText = amt.toFixed(2);
       calcAll();
     }
@@ -201,13 +201,6 @@
       document.getElementById('discountAmountDisplay').innerText = discAmt.toFixed(2);
       document.getElementById('adjDisplay').innerText = adj.toFixed(2);
       document.getElementById('grandTotalDisplay').innerText = (sub - discAmt + adj).toFixed(2);
-      // recompute tax display on tax% change
-      document.querySelectorAll('#rowsBody tr').forEach(tr => {
-        const qty = parseFloat(tr.querySelector('.qty').value)||0;
-        const mrp = parseFloat(tr.querySelector('.mrp').value)||0;
-        const taxPct = parseFloat(document.getElementById('taxPercent').value)||0;
-        tr.querySelector('.tax-display').innerText = (qty*mrp*taxPct/100).toFixed(2);
-      });
     }
     function setDiscMode(m) {
       discMode = m;
@@ -228,8 +221,8 @@
       const patient_id = document.getElementById('patientId').value;
       if (!patient_id) { alert('Please load the patient by code first.'); return; }
       const tr = document.getElementById(rid);
-      const sel = tr.querySelector('.med');
-      const medName = sel.value ? sel.options[sel.selectedIndex].text.replace(/\s*\[Stock:.*$/, '').trim() : '';
+      const medInput = tr.querySelector('.med');
+      const medName = (medInput.value || '').trim();
       const typed = prompt(medName ? `Save this medicine as PENDING for the patient?\n\n${medName}\n\nType a note (optional):` : 'Type the medicine name to mark as PENDING:');
       if (typed === null) return; // cancelled
       const finalName = medName || typed;
@@ -257,7 +250,8 @@
       const items = [];
       let valid = true;
       document.querySelectorAll('#rowsBody tr').forEach(tr => {
-        const mid = tr.querySelector('.med').value;
+        const medInput = tr.querySelector('.med');
+        const mid = medInput.dataset.medicineId || '';
         const qty = parseFloat(tr.querySelector('.qty').value);
         const mrp = parseFloat(tr.querySelector('.mrp').value);
         if (!mid || isNaN(qty) || qty<=0 || isNaN(mrp)) valid=false;
@@ -269,14 +263,14 @@
           pack: tr.querySelector('.pack').value
         });
       });
-      if (!valid) { alert('Fill Medicine, Qty and MRP for every row.'); return; }
+      if (!valid) { alert('For every row: pick a medicine from the dropdown, fill Qty and MRP.'); return; }
       const payload = {
         bill_date: document.getElementById('billDate').value,
         patient_id,
         invoice_no: document.getElementById('invoiceNo').value.trim(),
         town: document.getElementById('town').value.trim(),
         referred_by_doctor_id: document.getElementById('referredBy').value || null,
-        tax_percent: parseFloat(document.getElementById('taxPercent').value)||0,
+        tax_percent: 0,
         discount_percent: parseFloat(document.getElementById('discountPercent').value)||0,
         discount_amount: parseFloat(document.getElementById('discountAmount').value)||0,
         adjustment: parseFloat(document.getElementById('adjustment').value)||0,

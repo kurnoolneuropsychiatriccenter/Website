@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f3d8f">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Staff & Attendance</title>
   <script src="js/auth.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -35,12 +38,29 @@
     <!-- Attendance -->
     <div class="bg-white p-6 rounded-lg shadow mb-6">
       <h2 class="text-lg font-bold mb-4"><i class="fa fa-calendar-check mr-2 text-green-600"></i> Mark Attendance</h2>
+      <p class="text-xs text-gray-600 mb-2"><i class="fa fa-lock mr-1"></i> Once saved for a day, the attendance for that staff member is <b>locked</b> and cannot be changed.</p>
       <div class="mb-3 flex flex-wrap items-center gap-2">
         <label class="text-sm">Date:</label>
         <input type="date" id="attDate" class="border px-3 py-1.5 rounded text-sm" onchange="loadAttendance()" data-testid="att-date-input">
         <button onclick="saveAttendance()" class="ml-auto bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700" data-testid="save-att-btn"><i class="fa fa-save mr-1"></i> Save Attendance</button>
       </div>
       <div id="staffList" class="space-y-2 divide-y" data-testid="staff-list"></div>
+    </div>
+
+    <!-- Monthly summary -->
+    <div class="bg-white p-6 rounded-lg shadow mb-6 border-l-4 border-purple-500">
+      <h2 class="text-lg font-bold mb-4"><i class="fa fa-calendar-days mr-2 text-purple-600"></i> Monthly Attendance Summary</h2>
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <label class="text-sm">Month:</label>
+        <input type="month" id="summMonth" class="border px-3 py-1.5 rounded text-sm" data-testid="summ-month-input">
+        <button onclick="loadSummary()" class="bg-purple-600 text-white px-4 py-1.5 rounded text-sm hover:bg-purple-700" data-testid="load-summary-btn"><i class="fa fa-search mr-1"></i> Show Summary</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left" data-testid="summary-table">
+          <thead><tr class="bg-purple-50 text-purple-900 border-b text-sm"><th class="p-2">Staff</th><th class="p-2">Role</th><th class="p-2 text-center">Present days</th><th class="p-2 text-center">Half-days</th><th class="p-2 text-center">Absent days</th><th class="p-2 text-center">Total present <span class="text-xs text-gray-500">(P + ½H)</span></th></tr></thead>
+          <tbody id="summBody" class="divide-y text-sm"><tr><td colspan="6" class="p-4 text-center text-gray-500">Pick a month and click Show Summary.</td></tr></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- History -->
@@ -87,26 +107,55 @@
       if (!allStaff.length) { c.innerHTML = '<div class="text-gray-500 text-sm p-3">No staff added yet.</div>'; return; }
       allStaff.forEach(s => {
         const div = document.createElement('div');
-        const cur = map[s.id] || '';
-        div.className = 'flex items-center gap-2 py-2';
+        const cur = map[s.id];
+        const locked = !!cur;
+        div.className = 'flex items-center gap-2 py-2' + (locked ? ' bg-gray-50 rounded' : '');
+        const badge = locked ? `<span class="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded" data-testid="att-locked-${s.id}"><i class="fa fa-lock mr-1"></i>Locked: ${cur}</span>` : '';
+        const dis = locked ? 'disabled' : '';
         div.innerHTML = `
-          <div class="flex-1"><b>${s.staff_name}</b> <span class="text-xs text-gray-500">${s.role || ''} ${s.mobile ? '· ' + s.mobile : ''}</span></div>
-          <label class="text-sm"><input type="radio" name="att-${s.id}" value="Present" ${cur==='Present'?'checked':''} data-testid="att-present-${s.id}"> Present</label>
-          <label class="text-sm"><input type="radio" name="att-${s.id}" value="Absent" ${cur==='Absent'?'checked':''} data-testid="att-absent-${s.id}"> Absent</label>
-          <label class="text-sm"><input type="radio" name="att-${s.id}" value="Half-day" ${cur==='Half-day'?'checked':''}> Half-day</label>
+          <div class="flex-1"><b>${s.staff_name}</b> <span class="text-xs text-gray-500">${s.role || ''} ${s.mobile ? '· ' + s.mobile : ''}</span>${badge}</div>
+          <label class="text-sm ${locked?'opacity-50':''}"><input type="radio" name="att-${s.id}" value="Present" ${cur==='Present'?'checked':''} ${dis} data-testid="att-present-${s.id}"> Present</label>
+          <label class="text-sm ${locked?'opacity-50':''}"><input type="radio" name="att-${s.id}" value="Absent"  ${cur==='Absent' ?'checked':''} ${dis} data-testid="att-absent-${s.id}"> Absent</label>
+          <label class="text-sm ${locked?'opacity-50':''}"><input type="radio" name="att-${s.id}" value="Half-day" ${cur==='Half-day'?'checked':''} ${dis}> Half-day</label>
           <button onclick="delStaff(${s.id})" class="text-red-600 text-xs ml-2 hover:text-red-800" data-testid="delete-staff-${s.id}"><i class="fa fa-trash"></i></button>`;
         c.appendChild(div);
       });
     }
     async function saveAttendance() {
       const date = document.getElementById('attDate').value;
-      const entries = allStaff.map(s => {
+      // Only send staff whose row is not locked yet (no radio disabled)
+      const entries = [];
+      allStaff.forEach(s => {
+        const first = document.querySelector(`input[name="att-${s.id}"]`);
+        if (!first || first.disabled) return; // already locked, skip
         const sel = document.querySelector(`input[name="att-${s.id}"]:checked`);
-        return { staff_id: s.id, status: sel ? sel.value : 'Absent' };
+        entries.push({ staff_id: s.id, status: sel ? sel.value : 'Absent' });
       });
+      if (!entries.length) { alert('All staff already have attendance saved for this date.'); return; }
       const j = await (await fetch('/api/staff/attendance', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ attendance_date: date, entries })})).json();
       alert(j.message || (j.success?'Saved':'Failed'));
+      loadAttendance();       // re-render so newly saved rows become locked
       loadHistory();
+      loadSummary();
+    }
+    async function loadSummary() {
+      const month = document.getElementById('summMonth').value;
+      if (!month) return;
+      const j = await (await fetch(`/api/staff/attendance/monthly-summary?month=${month}`)).json();
+      const tb = document.getElementById('summBody'); tb.innerHTML = '';
+      const rows = (j.data && j.data.staff) || [];
+      if (!rows.length) { tb.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">No staff yet.</td></tr>'; return; }
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="p-2 font-medium">${r.staff_name}</td>
+          <td class="p-2 text-xs text-gray-600">${r.role || '-'}</td>
+          <td class="p-2 text-center font-bold text-green-700">${r.present_days || 0}</td>
+          <td class="p-2 text-center text-yellow-700">${r.half_days || 0}</td>
+          <td class="p-2 text-center text-red-600">${r.absent_days || 0}</td>
+          <td class="p-2 text-center font-bold text-blue-700">${r.present_equivalent}</td>`;
+        tb.appendChild(tr);
+      });
     }
     async function loadHistory() {
       const from = document.getElementById('histFrom').value, to = document.getElementById('histTo').value;
@@ -124,7 +173,9 @@
     document.getElementById('attDate').value = new Date().toISOString().split('T')[0];
     document.getElementById('histFrom').value = new Date().toISOString().split('T')[0];
     document.getElementById('histTo').value = new Date().toISOString().split('T')[0];
+    document.getElementById('summMonth').value = new Date().toISOString().slice(0, 7);
     loadStaff();
+    setTimeout(loadSummary, 400);
   </script>
 </body>
 </html>

@@ -34,6 +34,17 @@ Build a working full-stack Clinic Management System for **Kurnool Neuro Psychiat
 - Daily Expenses, Staff Attendance modules.
 - Refactored all print templates to A4.
 
+### Session 12 — 7-Change Batch (Feb 22, 2026)
+- **Suppliers form + list page** (`/suppliers.html`): Name, PAN, Phone, Address, GST, FSSAI, MSME fields with Save. Nav card `nav-suppliers` on dashboard. Backend upserts by name (case-insensitive) — no duplicates.
+- **Prefix-match medicine autocomplete** — new `/public/js/medicine-autocomplete.js` (`.med-ac-list { max-height:none; overflow:visible }`). Cap at 12 visible entries so no scrollbar ever appears. Wired into `medicalbill.html` (bill-med-input) and `purchase.html` (pur-med). Typing "para" only shows medicines starting with "para".
+- **Stock deduction on pending Clear** — `DELETE /api/pending-medicines/:id` now also decrements `medicines.current_stock` by the pending qty (case-insensitive match on medicine_name, clamped ≥ 0). Regular medical-bill save already deducted stock.
+- **Tax removed from Medical Bill** — MRP is tax-inclusive. Amount = qty × MRP. Green banner explains this in the form. Tax column hidden in items table and in print. `tax_percent` field kept in payload for backwards-compat but forced to 0 server-side.
+- **Attendance lock + monthly summary** — `POST /api/staff/attendance` switched from `ON CONFLICT DO UPDATE` to `INSERT OR IGNORE`; response says how many were saved vs already locked. `GET /api/staff/attendance/monthly-summary?month=YYYY-MM` returns present/half/absent + `present_equivalent = present + 0.5×half`. UI: locked rows show green "Locked" badge with `data-testid=att-locked-<id>` and radios are disabled; new Monthly Summary section on `staff.html`.
+- **PWA installable desktop app** — `/public/manifest.json` (name "Kurnool Neuro-ENT — Clinic Management", short "Kurnool Neuro-ENT", display "standalone"), `/public/icons/icon-192.png` + `icon-512.png` (dark-blue "KN" tile), minimal `/public/sw.js` service worker, `<link rel="manifest">` + `<meta name="theme-color" content="#0f3d8f">` injected into all 25 HTML files, service worker registered in `auth.js`.
+- **Medical Bill print → A5** (`@page { size: A5 portrait; margin: 6mm }`, 3-column meta, smaller fonts, Tax column removed). OP and Lab prints already on A5 from Session 11.
+- Tests: 14/14 pass (`test_seven_batch.py`); regression 47+/47+ across all iterations. Report `/app/test_reports/iteration_12.json`.
+- Login password changed by user from `admin123` → `Arif07@07`; Delete from `delete123` → `Arif0707`. Documented in `test_credentials.md`.
+
 ### Session 11 — Suppliers, A5 Prints, Full PDF, Pending Medicines (Feb 21, 2026)
 - **Supplier autocomplete + auto-save** — new `/api/suppliers` (GET/POST/DELETE) with case-insensitive upsert by name. Purchase form now shows a datalist so staff pick a saved supplier and GST/FSSAI/PAN/MSME/phone/address auto-fill. Every `POST /api/purchase/save` also silently upserts the supplier so the list grows organically.
 - **Removed the Prod Code column** from Purchase Entry (as requested — it was in the way).
