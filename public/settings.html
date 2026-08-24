@@ -161,29 +161,30 @@
       </form>
     </div>
 
-    <!-- Change Delete Password -->
+    <!-- Change Edit / Delete Password -->
     <div class="bg-white rounded-lg shadow p-6">
-      <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2"><i class="fa fa-trash mr-2 text-red-600"></i> Change Delete Password</h2>
-      <p class="text-sm text-gray-600 mb-3">This separate password is required whenever a bill / patient / medicine is deleted, so nobody deletes records by accident. It MUST be different from the login password.</p>
+      <h2 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2"><i class="fa fa-shield-halved mr-2 text-red-600"></i> Change Edit / Delete Password</h2>
+      <p class="text-sm text-gray-600 mb-3"><b>Same single password protects all EDITS and DELETES</b> across the app. Staff are asked to enter it before changing or deleting any record (the answer is remembered for 15 minutes so they aren't nagged for every keystroke). It MUST be different from the login password.</p>
       <form onsubmit="changePassword(event, 'delete')" class="space-y-3">
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1">Current LOGIN password (to authorize this change)</label>
           <input type="password" id="deleteCurrent" required class="w-full border rounded px-3 py-2 text-sm focus:outline-blue-500" data-testid="delete-current-input">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">New DELETE password (min 4 characters, must differ from login)</label>
+          <label class="block text-xs font-medium text-gray-600 mb-1">New EDIT / DELETE password (min 4 characters, must differ from login)</label>
           <input type="password" id="deleteNew" required minlength="4" class="w-full border rounded px-3 py-2 text-sm focus:outline-blue-500" data-testid="delete-new-input">
         </div>
         <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-medium" data-testid="change-delete-btn">
-          <i class="fa fa-check mr-1"></i> Change Delete Password
+          <i class="fa fa-check mr-1"></i> Change Edit / Delete Password
         </button>
         <p id="deleteMsg" class="text-xs"></p>
       </form>
+      <p class="text-xs text-gray-500 mt-3"><i class="fa fa-info-circle mr-1"></i> The moment you change this password, everyone using the app will be asked for it again on their next edit or delete.</p>
     </div>
 
     <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded text-sm text-yellow-800">
       <b>Default passwords on first launch:</b><br>
-      Login: <span class="font-mono">admin123</span> &middot; Delete: <span class="font-mono">delete123</span><br>
+      Login: <span class="font-mono">admin123</span> &middot; Edit/Delete: <span class="font-mono">delete123</span><br>
       Please change both above right away.
     </div>
   </div>
@@ -332,6 +333,8 @@
       if (j.success) {
         document.getElementById(type + 'Current').value = '';
         document.getElementById(type + 'New').value = '';
+        // If the edit/delete password changed, forget the cached one so users are re-prompted.
+        if (type === 'delete' && window.clearEditPassword) window.clearEditPassword();
       }
     }
     loadGst();

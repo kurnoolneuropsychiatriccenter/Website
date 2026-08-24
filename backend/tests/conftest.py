@@ -52,9 +52,10 @@ def _patch_session_auth():
 
     def new_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
+        # Only set Authorization at session level; X-Delete-Password is added per-request
+        # inside new_send / new_api_request so tests can override it via X-No-Auth.
         self.headers.update({
             "Authorization": f"Bearer {_token_holder['token']}",
-            "X-Delete-Password": DELETE_PASSWORD,
         })
 
     def new_send(self, request, **kwargs):
@@ -65,7 +66,7 @@ def _patch_session_auth():
                 and "/api/auth/login" not in request.url \
                 and "/api/public/" not in request.url:
             request.headers["Authorization"] = f"Bearer {_token_holder['token']}"
-            if request.method == "DELETE":
+            if request.method in ("DELETE", "PUT", "PATCH"):
                 request.headers.setdefault("X-Delete-Password", DELETE_PASSWORD)
         resp = original_send(self, request, **kwargs)
         # If 401 "Not logged in", refresh once and retry
@@ -90,10 +91,11 @@ def _patch_session_auth():
 
     def new_api_request(method, url, **kwargs):
         headers = kwargs.pop("headers", None) or {}
-        if "/api/" in url and "/api/auth/login" not in url \
+        no_auth = "X-No-Auth" in headers  # keep it in headers; send() will pop
+        if not no_auth and "/api/" in url and "/api/auth/login" not in url \
                 and "/api/public/" not in url:
             headers.setdefault("Authorization", f"Bearer {_token_holder['token']}")
-            if method.upper() == "DELETE":
+            if method.upper() in ("DELETE", "PUT", "PATCH"):
                 headers.setdefault("X-Delete-Password", DELETE_PASSWORD)
         return orig_api_request(method, url, headers=headers, **kwargs)
 

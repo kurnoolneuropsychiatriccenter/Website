@@ -33,7 +33,7 @@
         </div>
         <div>
           <label class="block text-xs font-medium mb-1">Phone Number</label>
-          <input type="tel" id="fPhone" pattern="[-0-9+ ]*" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-form-phone">
+          <input type="tel" id="fPhone" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-form-phone">
         </div>
         <div>
           <label class="block text-xs font-medium mb-1">GST Number</label>
@@ -51,7 +51,11 @@
           <label class="block text-xs font-medium mb-1">MSME Number</label>
           <input type="text" id="fMsme" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-form-msme">
         </div>
-        <div class="md:col-span-2">
+        <div>
+          <label class="block text-xs font-medium mb-1">DL Number <span class="text-gray-400 text-xs">(Drug Licence)</span></label>
+          <input type="text" id="fDl" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-form-dl">
+        </div>
+        <div class="md:col-span-3">
           <label class="block text-xs font-medium mb-1">Address</label>
           <input type="text" id="fAddress" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-form-address">
         </div>
@@ -76,6 +80,7 @@
             <th class="p-3">Phone</th>
             <th class="p-3">GST</th>
             <th class="p-3">PAN</th>
+            <th class="p-3">DL No.</th>
             <th class="p-3">FSSAI</th>
             <th class="p-3">MSME</th>
             <th class="p-3">Address</th>
@@ -83,7 +88,7 @@
           </tr>
         </thead>
         <tbody id="body" class="divide-y">
-          <tr><td colspan="8" class="p-6 text-center text-gray-500">Loading suppliers...</td></tr>
+          <tr><td colspan="9" class="p-6 text-center text-gray-500">Loading suppliers...</td></tr>
         </tbody>
       </table>
     </div>
@@ -99,6 +104,7 @@
         supplier_pan: document.getElementById('fPan').value.trim(),
         supplier_fssai: document.getElementById('fFssai').value.trim(),
         supplier_msme: document.getElementById('fMsme').value.trim(),
+        supplier_dl: document.getElementById('fDl').value.trim(),
         supplier_address: document.getElementById('fAddress').value.trim()
       };
       const j = await (await fetch('/api/suppliers', {
@@ -124,6 +130,7 @@
       document.getElementById('fPan').value = '';
       document.getElementById('fFssai').value = '';
       document.getElementById('fMsme').value = '';
+      document.getElementById('fDl').value = '';
       document.getElementById('fAddress').value = '';
       document.getElementById('formTitle').textContent = 'Add a Supplier';
       document.getElementById('formMsg').textContent = '';
@@ -136,6 +143,7 @@
       document.getElementById('fPan').value = s.pan_number || '';
       document.getElementById('fFssai').value = s.fssai_number || '';
       document.getElementById('fMsme').value = s.msme_number || '';
+      document.getElementById('fDl').value = s.dl_number || '';
       document.getElementById('fAddress').value = s.address || '';
       document.getElementById('formTitle').textContent = 'Edit Supplier — ' + (s.supplier_name || '');
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -146,7 +154,7 @@
       const tbody = document.getElementById('body'); tbody.innerHTML = '';
       const data = j.data || [];
       document.getElementById('countLbl').textContent = `${data.length} supplier${data.length===1?'':'s'}`;
-      if (!data.length) { tbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-gray-500">No suppliers saved yet. Add one using the form above.</td></tr>`; return; }
+      if (!data.length) { tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-gray-500">No suppliers saved yet. Add one using the form above.</td></tr>`; return; }
       data.forEach(s => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -154,6 +162,7 @@
           <td class="p-3">${s.phone || '-'}</td>
           <td class="p-3 font-mono text-xs">${s.gst_number || '-'}</td>
           <td class="p-3 font-mono text-xs">${s.pan_number || '-'}</td>
+          <td class="p-3 text-xs">${s.dl_number || '-'}</td>
           <td class="p-3 text-xs">${s.fssai_number || '-'}</td>
           <td class="p-3 text-xs">${s.msme_number || '-'}</td>
           <td class="p-3 text-xs">${s.address || '-'}</td>

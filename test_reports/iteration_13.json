@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 13 — Verified the edit/delete password middleware (PUT/PATCH/DELETE), whitelist bypass, Suppliers dl_number persistence, Purchase page supplier_dl input + medicine autocomplete prefix filter, Settings section rename, and auth.js edit-password gating (sessionStorage clinic_edit_pw + window.clearEditPassword). Created /app/backend/tests/test_edit_lock_and_dl.py (10 tests: 9 PASS / 1 FAIL) and updated /app/backend/tests/conftest.py to auto-inject X-Delete-Password on PUT/PATCH (in addition to DELETE) so legacy tests keep working with the new middleware. Frontend verified via Playwright on public URL. All frontend features from the review request are present and behave correctly. ONE backend bug confirmed: POST /api/purchase/save does NOT propagate supplier_dl into suppliers (nor into purchases table — the purchases table has no dl_number column at all).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/purchase/save", "issue": "supplier_dl is not destructured from req.body and not passed to upsertSupplier(). Result: creating/updating a supplier via the Purchase page save flow leaves suppliers.dl_number = ''. Additionally, the purchases table has NO dl_number column (missing from ALTER TABLE list at server.js:361-371) — so even if propagation is fixed, the DL is not stored per-purchase. Fix (server.js ~line 852): destructure supplier_dl from req.body and pass it into upsertSupplier({...supplier_dl, ...}); also add ALTER TABLE purchases ADD COLUMN dl_number TEXT and include it in the INSERT INTO purchases columns/values.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/suppliers", "issue": "Returns 200 with data.id=null when supplier_name is empty (upsertSupplier silently drops). Should return 400. (Carried over from iter 12.)"},
+      {"endpoint": "server.js grown to 2264 lines — still monolithic. Splitting into routes/* was flagged in iter10-12 and is still not done."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "suppliers.html — phone input", "issue": "pattern=\"[0-9+ -]*\" is an invalid regex (unescaped hyphen inside char class). Browser throws SyntaxError. Carried over from iter 12 — still not fixed. Fix: use pattern=\"[0-9+ \\-]*\" or move the hyphen to end/start of the class.", "selector": "[data-testid=supplier-form-phone]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_edit_lock_and_dl.py",
+    "/app/test_reports/pytest/iter13.xml",
+    "/app/test_reports/pytest/iter13_all.xml"
+  ],
+  "action_items": [
+    "HIGH: Wire supplier_dl through /api/purchase/save. In server.js, destructure supplier_dl from req.body; add it to the upsertSupplier({...}) call; add ALTER TABLE purchases ADD COLUMN dl_number TEXT and include dl_number in the INSERT INTO purchases columns.",
+    "LOW: Fix suppliers.html phone-input pattern regex (still broken across iterations).",
+    "OPTIONAL: Update /app/memory/test_credentials.md — passwords are Login=Arif07@07, Edit/Delete=Arif0707. File still says delete123. Also rename that section to 'Edit/Delete Password' to match new UI (was 'Delete Password')."
+  ],
+  "critical_code_review_comments": [
+    "server.js purchase/save (~line 852-857): destructuring list omits supplier_dl but includes every other supplier_* field — clear oversight given the review-request scope explicitly says supplier_dl must propagate.",
+    "server.js purchases table (line 232 + ALTER list 361-371): no dl_number column ever added — cannot persist DL per-invoice even for future reporting.",
+    "server.js middleware (line 79-89): password is fetched via bcrypt.compareSync — synchronous, but wrapped in async fn; consider bcrypt.compare for consistency. Not a bug but a code-smell.",
+    "public/js/auth.js: window.clearEditPassword is exposed globally without namespacing (window.__clinic or similar) — acceptable for a single-page app but noted.",
+    "conftest.py legacy tests (test_auth_password.py, test_asha_medicals.py, some test_new_features.py) still use hardcoded admin123/delete123 — they now fail against the user's actual Arif07@07 / Arif0707 credentials. Not caused by this iteration; they were failing since credentials changed. Recommend the main agent parametrize those files via CLINIC_LOGIN_PASSWORD / CLINIC_DELETE_PASSWORD env vars.",
+    "REGRESSION IMPACT of the new middleware: any legacy pytest that does a PUT/PATCH without X-Delete-Password will now fail. Fixed at conftest.py level (auto-injection) so the majority of legacy tests continue to pass."
+  ],
+  "updated_files": [
+    "/app/backend/tests/conftest.py (auto-inject X-Delete-Password on PUT/PATCH too; only add Authorization at session level so per-request X-No-Auth can properly disable it; honor X-No-Auth in both requests.Session.send and requests.api.request paths)",
+    "/app/backend/tests/test_edit_lock_and_dl.py (NEW — 10 tests)"
+  ],
+  "success_rate": {
+    "backend": "9/10 iter-13 tests pass (90%). The 1 failure is the confirmed /api/purchase/save supplier_dl propagation bug. Full-suite: 158/176 pass (17 legacy tests failing due to pre-existing hardcoded-credential issues — NOT introduced by this iteration).",
+    "frontend": "100% of review-request checks: suppliers-form-dl testid present, DL No. column present in table, purchase page supplier-dl-input present, pur-med autocomplete filters by prefix only (e.g., typing 'c' shows only 'Clonazepam 0.5mg'), .med-ac-list computed max-height=none / overflow=visible / min-width=260px, window.clearEditPassword is a function, settings.html shows 'Change Edit / Delete Password' and hint line 'Edit/Delete: delete123', authFetch DELETE prompts for pw once and caches it in sessionStorage.clinic_edit_pw."
+  },
+  "test_credentials": "Login: Arif07@07 | Edit/Delete: Arif0707. Same header name X-Delete-Password is now used for BOTH edit and delete (semantic rename only). conftest defaults updated across iter 12; iter 13 conftest now injects the header on PUT/PATCH as well.",
+  "seed_data_creation": "test_edit_lock_and_dl.py creates TEST_EDLK_*/TEST_DL_*/TEST_DL_UP_*/TEST_PURDL_* suppliers and cleans them where possible via DELETE. Playwright test seeded one PARACETAMOL_TEST purchase (id=30) with supplier TEST_SEED_P_SUP — safe to leave.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Once the /api/purchase/save supplier_dl bug is fixed, re-run: `cd /app && REACT_APP_BACKEND_URL=<url> python -m pytest backend/tests/test_edit_lock_and_dl.py -v` — should be 10/10. The full legacy suite has 17 failing tests due to hardcoded admin123/delete123 credentials in test_auth_password.py, test_asha_medicals.py, test_new_features.py — those are NOT caused by this iteration and should be normalized separately (accept env-var creds). conftest.py now uses session-level Authorization only + per-request X-Delete-Password on DELETE/PUT/PATCH; tests can opt-out by including header 'X-No-Auth' in the headers arg.",
+  "rca of the issue": "BUG: /api/purchase/save does not propagate supplier_dl. RCA: In server.js the destructuring statement at ~line 852-854 lists supplier_gst/fssai/pan/msme/phone/address but was never updated to include supplier_dl when the DL feature was added. Additionally, the purchases table schema (server.js line 232 + ALTER list 361-371) still lacks a dl_number column. REPRODUCTION: POST /api/purchase/save with body {supplier_name:'X', supplier_dl:'DL-123', items:[...]} then GET /api/suppliers — supplier X has dl_number=''. MITIGATION: (1) add supplier_dl to the destructure, (2) pass supplier_dl into upsertSupplier({...}), (3) add ALTER TABLE purchases ADD COLUMN dl_number TEXT to the additive-columns list, and (4) include dl_number in the INSERT INTO purchases columns/values."
+}

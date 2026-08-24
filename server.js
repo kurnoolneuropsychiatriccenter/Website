@@ -61,14 +61,29 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// Guard: every DELETE /api/* needs the correct delete password header
+// Guard: every DELETE / PUT / PATCH /api/* needs the correct edit/delete password header.
+// (Same password for edits and deletes — the "Edit/Delete Password". Whitelisted paths
+//  below are allowed without it because they are auth / password-change / settings flows
+//  that already require the current login password OR are internally invoked.)
+const EDIT_LOCK_WHITELIST = [
+  '/auth/change-password',
+  '/auth/change-developer-password',
+  '/auth/regenerate-recovery-code',
+  '/auth/developer-reset-password',
+  '/settings',                 // PUT /api/settings (GST, recovery_email etc.)
+  '/settings/smtp',            // PUT /api/settings/smtp
+  '/settings/smtp-test',
+  '/dev/request-danger-code',
+  '/dev/verify-danger-code'
+];
 app.use('/api', async (req, res, next) => {
-  if (req.method !== 'DELETE') return next();
+  if (!['DELETE', 'PUT', 'PATCH'].includes(req.method)) return next();
+  if (EDIT_LOCK_WHITELIST.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
   const pw = req.headers['x-delete-password'];
-  if (!pw) return res.status(401).json({ success: false, message: 'Delete password required' });
+  if (!pw) return res.status(401).json({ success: false, message: 'Edit/Delete password required' });
   const hash = await getSetting('delete_password_hash');
   if (!hash || !bcrypt.compareSync(String(pw), hash)) {
-    return res.status(401).json({ success: false, message: 'Wrong delete password' });
+    return res.status(401).json({ success: false, message: 'Wrong edit/delete password' });
   }
   next();
 });
@@ -340,12 +355,15 @@ function initDb() {
       phone TEXT,
       address TEXT
     )`);
+    // Additive columns for suppliers
+    ['ALTER TABLE suppliers ADD COLUMN dl_number TEXT'].forEach(sql => db.run(sql, () => {}));
 
     // Additive columns for enriched purchases
     ['ALTER TABLE purchases ADD COLUMN supplier_gst TEXT',
      'ALTER TABLE purchases ADD COLUMN supplier_fssai TEXT',
      'ALTER TABLE purchases ADD COLUMN supplier_pan TEXT',
      'ALTER TABLE purchases ADD COLUMN supplier_msme TEXT',
+     'ALTER TABLE purchases ADD COLUMN supplier_dl TEXT',
      'ALTER TABLE purchases ADD COLUMN supplier_phone TEXT',
      'ALTER TABLE purchases ADD COLUMN supplier_address TEXT',
      'ALTER TABLE purchases ADD COLUMN subtotal REAL DEFAULT 0',
@@ -809,12 +827,12 @@ function upsertSupplier(s, cb) {
   db.get(`SELECT id FROM suppliers WHERE supplier_name = ? COLLATE NOCASE`, [name], (err, row) => {
     if (err) return cb && cb(err);
     if (row) {
-      db.run(`UPDATE suppliers SET gst_number = ?, fssai_number = ?, pan_number = ?, msme_number = ?, phone = ?, address = ? WHERE id = ?`,
-        [s.supplier_gst || '', s.supplier_fssai || '', s.supplier_pan || '', s.supplier_msme || '', s.supplier_phone || '', s.supplier_address || '', row.id],
+      db.run(`UPDATE suppliers SET gst_number = ?, fssai_number = ?, pan_number = ?, msme_number = ?, dl_number = ?, phone = ?, address = ? WHERE id = ?`,
+        [s.supplier_gst || '', s.supplier_fssai || '', s.supplier_pan || '', s.supplier_msme || '', s.supplier_dl || '', s.supplier_phone || '', s.supplier_address || '', row.id],
         (e2) => cb && cb(e2, row.id));
     } else {
-      db.run(`INSERT INTO suppliers (supplier_name, gst_number, fssai_number, pan_number, msme_number, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [name, s.supplier_gst || '', s.supplier_fssai || '', s.supplier_pan || '', s.supplier_msme || '', s.supplier_phone || '', s.supplier_address || ''],
+      db.run(`INSERT INTO suppliers (supplier_name, gst_number, fssai_number, pan_number, msme_number, dl_number, phone, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [name, s.supplier_gst || '', s.supplier_fssai || '', s.supplier_pan || '', s.supplier_msme || '', s.supplier_dl || '', s.supplier_phone || '', s.supplier_address || ''],
         function(e2) { cb && cb(e2, this && this.lastID); });
     }
   });
@@ -834,7 +852,7 @@ app.delete('/api/suppliers/:id', (req, res) => {
 
 app.post('/api/purchase/save', (req, res) => {
   const { invoice_no, supplier_name, invoice_date, items,
-          supplier_gst, supplier_fssai, supplier_pan, supplier_msme, supplier_phone, supplier_address,
+          supplier_gst, supplier_fssai, supplier_pan, supplier_msme, supplier_dl, supplier_phone, supplier_address,
           adjustment } = req.body;
   if (!items || items.length === 0) return res.status(400).json({ success: false, message: 'No purchase items provided' });
 
@@ -867,16 +885,16 @@ app.post('/api/purchase/save', (req, res) => {
 
     // Auto-save/update the supplier in the suppliers master (fire-and-forget)
     upsertSupplier({
-      supplier_name, supplier_gst, supplier_fssai, supplier_pan, supplier_msme, supplier_phone, supplier_address
+      supplier_name, supplier_gst, supplier_fssai, supplier_pan, supplier_msme, supplier_dl, supplier_phone, supplier_address
     }, () => {});
 
     db.run(
       `INSERT INTO purchases (invoice_no, supplier_name, invoice_date, grand_total,
-                              supplier_gst, supplier_fssai, supplier_pan, supplier_msme, supplier_phone, supplier_address,
+                              supplier_gst, supplier_fssai, supplier_pan, supplier_msme, supplier_dl, supplier_phone, supplier_address,
                               subtotal, sgst_total, cgst_total, adjustment)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [invoice_no, supplier_name, invoice_date || getTodayDate(), grand_total,
-       supplier_gst || '', supplier_fssai || '', supplier_pan || '', supplier_msme || '', supplier_phone || '', supplier_address || '',
+       supplier_gst || '', supplier_fssai || '', supplier_pan || '', supplier_msme || '', supplier_dl || '', supplier_phone || '', supplier_address || '',
        subtotal, sgst_total, cgst_total, adj],
       function(err) {
         if (err) {

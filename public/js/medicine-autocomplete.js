@@ -10,7 +10,10 @@
   style.textContent = `
     .med-ac-wrap { position: relative; display: inline-block; width: 100%; }
     .med-ac-list {
-      position: absolute; left: 0; right: 0; top: 100%;
+      position: absolute; left: 0; top: 100%;
+      min-width: 260px;                              /* wide enough for long medicine names even in narrow cells */
+      width: max-content;
+      max-width: 380px;
       background: #fff; border: 1px solid #93c5fd; border-top: none;
       z-index: 40; box-shadow: 0 6px 12px rgba(0,0,0,0.08);
       max-height: none;      /* no scrollbar per user request */

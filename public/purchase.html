@@ -45,6 +45,7 @@
           <div><label class="block text-xs font-medium mb-1">PAN Number</label><input type="text" id="supPan" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-pan-input"></div>
 
           <div><label class="block text-xs font-medium mb-1">MSME Number</label><input type="text" id="supMsme" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-msme-input"></div>
+          <div><label class="block text-xs font-medium mb-1">DL Number</label><input type="text" id="supDl" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-dl-input"></div>
           <div><label class="block text-xs font-medium mb-1">Phone</label><input type="text" id="supPhone" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-phone-input"></div>
           <div><label class="block text-xs font-medium mb-1">Address</label><input type="text" id="supAddress" class="w-full border px-3 py-2 rounded text-sm" data-testid="supplier-address-input"></div>
         </div>
@@ -125,6 +126,9 @@
       document.getElementById('supFssai').value = s.fssai_number || '';
       document.getElementById('supPan').value = s.pan_number || '';
       document.getElementById('supMsme').value = s.msme_number || '';
+      document.getElementById('supDl').value = s.dl_number || '';
+      document.getElementById('supPhone').value = s.phone || '';
+      document.getElementById('supAddress').value = s.address || '';
       document.getElementById('supPhone').value = s.phone || '';
       document.getElementById('supAddress').value = s.address || '';
     }
@@ -234,6 +238,7 @@
         supplier_fssai: document.getElementById('supFssai').value,
         supplier_pan: document.getElementById('supPan').value,
         supplier_msme: document.getElementById('supMsme').value,
+        supplier_dl: document.getElementById('supDl').value,
         supplier_phone: document.getElementById('supPhone').value,
         supplier_address: document.getElementById('supAddress').value,
         adjustment: parseFloat(document.getElementById('adjustment').value)||0,
